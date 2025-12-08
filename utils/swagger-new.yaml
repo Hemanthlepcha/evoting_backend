@@ -7,7 +7,9 @@ servers:
   - url: http://localhost:3001
     description: Local development server
   - url: https://evoting-p0zm.onrender.com
-    description: Cloud server
+    description: Cloud server old
+  - url: https://evoting-backend-0v72.onrender.com
+    description: Cloud server New
 
 paths:
   /auth/token:
