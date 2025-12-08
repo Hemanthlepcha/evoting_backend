@@ -16,7 +16,7 @@ contract Voting {
 
     struct Candidate {
         string name;
-        string demkhong; // constituency
+        string location; // Changed from demkhong - now supports all election types
     }
 
     // =======================
@@ -34,16 +34,16 @@ contract Voting {
     mapping(string => mapping(string => bool)) private isCandidateTracked; // electionId => candidate => exists
     mapping(string => mapping(string => Candidate)) private candidateDetails; // electionId => candidate => Candidate
 
-    // Track unique demkhongs per election for fast constituency summaries
-    mapping(string => string[]) private demkhongsPerElection; // electionId => demkhong list
-    mapping(string => mapping(string => bool)) private isDemkhongTracked; // electionId => demkhong => exists
+    // Track unique locations per election for fast geographical summaries
+    mapping(string => string[]) private locationsPerElection; // electionId => location list
+    mapping(string => mapping(string => bool)) private isLocationTracked; // electionId => location => exists
 
-    // Gender + demkhong aggregates
+    // Gender + location aggregates
     mapping(string => mapping(Gender => uint256)) private genderVoteCount; // electionId => gender => total
-    mapping(string => mapping(string => uint256)) private demkhongVotes; // electionId => demkhong => total votes
+    mapping(string => mapping(string => uint256)) private locationVotes; // electionId => location => total votes
     mapping(string => mapping(string => mapping(Gender => uint256)))
-        private demkhongGenderVoteCount;
-    // electionId => demkhong => gender => total
+        private locationGenderVoteCount;
+    // electionId => location => gender => total
 
     // =======================
     // Events
@@ -52,7 +52,7 @@ contract Voting {
     event CandidateRegistered(
         string indexed electionId,
         string indexed candidate,
-        string demkhong
+        string location
     );
     event CandidateRemoved(string indexed electionId, string indexed candidate);
     event ElectionEnded(string indexed electionId);
@@ -91,7 +91,7 @@ contract Voting {
     function registerCandidate(
         string memory electionId,
         string memory candidate,
-        string memory demkhong
+        string memory location
     ) public onlyOwner {
         require(
             !isCandidateTracked[electionId][candidate],
@@ -108,16 +108,16 @@ contract Voting {
         candidatesPerElection[electionId].push(candidate);
         candidateDetails[electionId][candidate] = Candidate(
             candidate,
-            demkhong
+            location
         );
 
-        // Track demkhong (unique per election)
-        if (!isDemkhongTracked[electionId][demkhong]) {
-            isDemkhongTracked[electionId][demkhong] = true;
-            demkhongsPerElection[electionId].push(demkhong);
+        // Track location (unique per election)
+        if (!isLocationTracked[electionId][location]) {
+            isLocationTracked[electionId][location] = true;
+            locationsPerElection[electionId].push(location);
         }
 
-        emit CandidateRegistered(electionId, candidate, demkhong);
+        emit CandidateRegistered(electionId, candidate, location);
     }
 
     function removeCandidate(
@@ -180,10 +180,11 @@ contract Voting {
         // Update aggregates
         genderVoteCount[electionId][gender] += 1;
 
-        string memory demkhong = candidateDetails[electionId][candidate]
-            .demkhong;
-        demkhongVotes[electionId][demkhong] += 1;
-        demkhongGenderVoteCount[electionId][demkhong][gender] += 1;
+        // Get candidate's location and aggregate votes
+        string memory location = candidateDetails[electionId][candidate]
+            .location;
+        locationVotes[electionId][location] += 1;
+        locationGenderVoteCount[electionId][location][gender] += 1;
 
         emit VoteCast(electionId, uid);
     }
@@ -200,7 +201,7 @@ contract Voting {
         onlyOwner
         returns (
             string[] memory candidates,
-            string[] memory demkhongs,
+            string[] memory locations,
             uint256[] memory candidateVotes,
             uint256 totalVotes,
             uint256 totalMale,
@@ -210,13 +211,13 @@ contract Voting {
         require(electionExists[electionId], "Election ID does not exist");
 
         candidates = candidatesPerElection[electionId];
-        demkhongs = new string[](candidates.length);
+        locations = new string[](candidates.length);
         candidateVotes = new uint256[](candidates.length);
         totalVotes = 0;
 
         for (uint i = 0; i < candidates.length; i++) {
             candidateVotes[i] = voteCount[electionId][candidates[i]];
-            demkhongs[i] = candidateDetails[electionId][candidates[i]].demkhong;
+            locations[i] = candidateDetails[electionId][candidates[i]].location;
             totalVotes += candidateVotes[i];
         }
 
@@ -224,6 +225,41 @@ contract Voting {
         totalFemale = genderVoteCount[electionId][Gender.Female];
     }
 
+    function getLocationResults(
+        string memory electionId
+    )
+        public
+        view
+        onlyOwner
+        returns (
+            string[] memory locations,
+            uint256[] memory totalVotesByLocation,
+            uint256[] memory maleByLocation,
+            uint256[] memory femaleByLocation
+        )
+    {
+        require(electionExists[electionId], "Election does not exist");
+
+        locations = locationsPerElection[electionId];
+        uint256 len = locations.length;
+
+        totalVotesByLocation = new uint256[](len);
+        maleByLocation = new uint256[](len);
+        femaleByLocation = new uint256[](len);
+
+        for (uint i = 0; i < len; i++) {
+            string memory loc = locations[i];
+            totalVotesByLocation[i] = locationVotes[electionId][loc];
+            maleByLocation[i] = locationGenderVoteCount[electionId][loc][
+                Gender.Male
+            ];
+            femaleByLocation[i] = locationGenderVoteCount[electionId][loc][
+                Gender.Female
+            ];
+        }
+    }
+
+    // Backward compatibility - alias for old function name
     function getDemkhongResults(
         string memory electionId
     )
@@ -231,31 +267,13 @@ contract Voting {
         view
         onlyOwner
         returns (
-            string[] memory demkhongs,
-            uint256[] memory totalVotesByDemkhong,
-            uint256[] memory maleByDemkhong,
-            uint256[] memory femaleByDemkhong
+            string[] memory locations,
+            uint256[] memory totalVotesByLocation,
+            uint256[] memory maleByLocation,
+            uint256[] memory femaleByLocation
         )
     {
-        require(electionExists[electionId], "Election does not exist");
-
-        demkhongs = demkhongsPerElection[electionId];
-        uint256 len = demkhongs.length;
-
-        totalVotesByDemkhong = new uint256[](len);
-        maleByDemkhong = new uint256[](len);
-        femaleByDemkhong = new uint256[](len);
-
-        for (uint i = 0; i < len; i++) {
-            string memory d = demkhongs[i];
-            totalVotesByDemkhong[i] = demkhongVotes[electionId][d];
-            maleByDemkhong[i] = demkhongGenderVoteCount[electionId][d][
-                Gender.Male
-            ];
-            femaleByDemkhong[i] = demkhongGenderVoteCount[electionId][d][
-                Gender.Female
-            ];
-        }
+        return getLocationResults(electionId);
     }
 
     function getAllElections() public view onlyOwner returns (string[] memory) {

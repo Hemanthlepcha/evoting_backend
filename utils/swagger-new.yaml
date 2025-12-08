@@ -9,14 +9,13 @@ servers:
   - url: https://evoting-p0zm.onrender.com
     description: Cloud server
 
-
 paths:
   /auth/token:
     post:
       tags:
         - Authentication
       description: Authenticate and get access tokens
-    
+
       summary: Get access tokens
       requestBody:
         required: true
@@ -39,8 +38,8 @@ paths:
     post:
       tags:
         - Admin
-      summary: Register a candidate
-      description: Register a new candidate for an election (admin only)
+      summary: Register a candidate (Multi-Election Type Support)
+      description: Register a new candidate for an election with support for National Assembly, Gup, Mangmi, and Tshogpa elections (admin only)
       security:
         - bearerAuth: []
       requestBody:
@@ -53,14 +52,117 @@ paths:
                 electionId:
                   type: string
                   description: ID of the election
+                  example: "NA_2025"
                 candidate:
                   type: string
-                  description: Address or identifier of the candidate
+                  description: Name of the candidate
+                  example: "Tshering Dorji"
+                location:
+                  type: object
+                  description: Geographical location (NEW FORMAT - supports all election types)
+                  properties:
+                    dzongkhag:
+                      type: string
+                      description: Dzongkhag name
+                      example: "Thimphu"
+                    demkhong:
+                      type: string
+                      description: Demkhong name (for National Assembly)
+                      example: "Thimphu"
+                    gewog:
+                      type: string
+                      description: Gewog name (for Gup/Mangmi/Tshogpa)
+                      example: "Chang"
+                    chewog:
+                      type: string
+                      description: Chewog name (for Tshogpa only)
+                      example: "Babesa"
+                    throm:
+                      type: string
+                      description: Throm/Municipality name (for Thrompon/Thrompon Tshogpa)
+                      example: "Thimphu Thromde"
+                electionType:
+                  type: string
+                  description: Type of election (optional - can be auto-detected, case-insensitive)
+                  enum:
+                    [
+                      NATIONAL_ASSEMBLY,
+                      NATIONAL_COUNCIL,
+                      GUP,
+                      MANGMI,
+                      TSHOGPA,
+                      THROMPON,
+                      THROMPON_TSHOGPA,
+                    ]
+                  example: "NATIONAL_ASSEMBLY"
+                demkhong:
+                  type: string
+                  description: Legacy format - demkhong only (still supported for backward compatibility)
+                  example: "Thimphu"
               required:
                 - electionId
                 - candidate
+            examples:
+              nationalAssembly:
+                summary: National Assembly Election
+                value:
+                  electionId: "NA_2025"
+                  candidate: "Tshering Dorji"
+                  location:
+                    dzongkhag: "Thimphu"
+                    demkhong: "Thimphu"
+                  electionType: "NATIONAL_ASSEMBLY"
+              nationalCouncil:
+                summary: National Council Election
+                value:
+                  electionId: "NC_2025"
+                  candidate: "Sonam Phuntsho"
+                  location:
+                    dzongkhag: "Paro"
+                  electionType: "nc" # Case-insensitive
+              gupElection:
+                summary: Gup Election
+                value:
+                  electionId: "GUP_2025_THIMPHU"
+                  candidate: "Karma Wangchuk"
+                  location:
+                    dzongkhag: "Paro"
+                    gewog: "Lungnyi"
+                  electionType: "gup" # Case-insensitive
+              tshogpaElection:
+                summary: Tshogpa Election
+                value:
+                  electionId: "TSHOGPA_2025"
+                  candidate: "Pema Thinley"
+                  location:
+                    dzongkhag: "Paro"
+                    gewog: "Lungnyi"
+                    chewog: "Tsento"
+                  electionType: "TSHOGPA"
+              thromponElection:
+                summary: Thrompon Election
+                value:
+                  electionId: "THROM_2025"
+                  candidate: "Ugyen Dorji"
+                  location:
+                    throm: "Thimphu Thromde"
+                  electionType: "thrompoen" # Alternative spelling accepted
+              thromponTshogpaElection:
+                summary: Thrompon Tshogpa Election
+                value:
+                  electionId: "THROM_TSH_2025"
+                  candidate: "Dawa Tshering"
+                  location:
+                    throm: "Phuentsholing Thromde"
+                  electionType: "THROMPON_TSHOGPA"
+              legacyFormat:
+                summary: Legacy Format (Backward Compatible)
+                value:
+                  electionId: "NA_2025"
+                  candidate: "Tshering Dorji"
+                  demkhong: "Thimphu"
       responses:
-        '200':
+        "200":
           description: Candidate registered successfully
           content:
             application/json:
@@ -69,9 +171,41 @@ paths:
                 properties:
                   message:
                     type: string
+                    example: "Candidate registered successfully"
+                  candidate:
+                    type: string
+                    example: "Tshering Dorji"
+                  electionType:
+                    type: string
+                    example: "NATIONAL_ASSEMBLY"
+                  location:
+                    type: string
+                    example: "Thimphu/Thimphu"
                   txHash:
                     type: string
-        '500':
+                    example: "0xabc123..."
+        "400":
+          description: Bad request - missing or invalid fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  missingFields:
+                    type: array
+                    items:
+                      type: string
+                  requiredFields:
+                    type: array
+                    items:
+                      type: string
+        "409":
+          description: Candidate already registered
+        "403":
+          description: Unauthorized - only contract owner can register
+        "500":
           description: Internal server error
           content:
             application/json:
@@ -106,7 +240,7 @@ paths:
                 - electionId
                 - candidate
       responses:
-        '200':
+        "200":
           description: Candidate removed successfully
           content:
             application/json:
@@ -117,7 +251,7 @@ paths:
                     type: string
                   txHash:
                     type: string
-        '500':
+        "500":
           description: Internal server error
           content:
             application/json:
@@ -132,7 +266,7 @@ paths:
       tags:
         - Voting
       summary: Cast a vote
-      description: Cast a vote in an election
+      description: Cast a vote in an election (works for all election types)
       security:
         - bearerAuth: []
       requestBody:
@@ -145,18 +279,27 @@ paths:
                 electionId:
                   type: string
                   description: ID of the election
+                  example: "GUP_2025_THIMPHU"
                 uid:
                   type: string
-                  description: Unique identifier of the voter
+                  description: Unique identifier of the voter (CID)
+                  example: "11234567890123"
                 candidate:
                   type: string
-                  description: Address or identifier of the candidate being voted for
+                  description: Name of the candidate being voted for
+                  example: "Karma Wangchuk"
+                gender:
+                  type: string
+                  description: Gender of the voter
+                  enum: [Male, Female]
+                  example: "Male"
               required:
                 - electionId
                 - uid
                 - candidate
+                - gender
       responses:
-        '200':
+        "200":
           description: Vote cast successfully
           content:
             application/json:
@@ -165,9 +308,23 @@ paths:
                 properties:
                   message:
                     type: string
+                    example: "Vote cast successfully"
                   txHash:
                     type: string
-        '500':
+                    example: "0xdef456..."
+                  txStatus:
+                    type: string
+                    example: "success"
+                  explorerLink:
+                    type: string
+                    example: "https://amoy.polygonscan.com/tx/0xdef456..."
+        "400":
+          description: Bad request - missing required fields
+        "404":
+          description: Election or candidate not found
+        "409":
+          description: Already voted in this election
+        "500":
           description: Internal server error
           content:
             application/json:
@@ -198,7 +355,7 @@ paths:
               required:
                 - electionId
       responses:
-        '200':
+        "200":
           description: Election ended successfully
           content:
             application/json:
@@ -209,7 +366,7 @@ paths:
                     type: string
                   txHash:
                     type: string
-        '500':
+        "500":
           description: Internal server error
           content:
             application/json:
@@ -228,7 +385,7 @@ paths:
       security:
         - bearerAuth: []
       responses:
-        '200':
+        "200":
           description: List of elections retrieved successfully
           content:
             application/json:
@@ -239,7 +396,7 @@ paths:
                     type: array
                     items:
                       type: object
-        '500':
+        "500":
           description: Internal server error
           content:
             application/json:
@@ -296,7 +453,8 @@ paths:
     get:
       tags:
         - Election Info
-      summary: Get vote counts
+      summary: Get candidate vote counts with location details
+      description: Retrieve detailed voting results with structured location information for all election types
       security:
         - bearerAuth: []
       parameters:
@@ -305,11 +463,70 @@ paths:
           required: true
           schema:
             type: string
+          description: ID of the election
+          example: "GUP_2025_THIMPHU"
+        - in: query
+          name: electionType
+          required: false
+          schema:
+            type: string
+            enum:
+              [
+                NATIONAL_ASSEMBLY,
+                NATIONAL_COUNCIL,
+                GUP,
+                MANGMI,
+                TSHOGPA,
+                THROMPON,
+                THROMPON_TSHOGPA,
+              ]
+          description: Type of election (recommended for structured location details, case-insensitive)
+          example: "GUP"
       responses:
-        200:
-          description: Successful response
-        401:
+        "200":
+          description: Vote counts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        candidate:
+                          type: string
+                          example: "Karma Wangchuk"
+                        location:
+                          type: string
+                          example: "Paro/Lungnyi"
+                        locationDetails:
+                          type: object
+                          description: Structured location information
+                          example:
+                            dzongkhag: "Paro"
+                            gewog: "Lungnyi"
+                        votes:
+                          type: string
+                          example: "450"
+                  totalVotes:
+                    type: string
+                    example: "830"
+                  totalMale:
+                    type: string
+                    example: "420"
+                  totalFemale:
+                    type: string
+                    example: "410"
+        "400":
+          description: Bad request
+        "404":
+          description: Election not found
+        "401":
           description: Unauthorized
+        "403":
+          description: Forbidden - admin only
 
   /api/checkVoted:
     get:
@@ -326,14 +543,16 @@ paths:
           schema:
             type: string
           description: ID of the election
+          example: "GUP_2025_THIMPHU"
         - name: uid
           in: query
           required: true
           schema:
             type: string
-          description: Unique identifier of the voter
+          description: Unique identifier of the voter (CID)
+          example: "11234567890123"
       responses:
-        '200':
+        "200":
           description: Vote status retrieved successfully
           content:
             application/json:
@@ -342,7 +561,12 @@ paths:
                 properties:
                   voted:
                     type: boolean
-        '500':
+                    example: true
+        "400":
+          description: Bad request - missing parameters
+        "403":
+          description: Forbidden - admin only
+        "500":
           description: Internal server error
           content:
             application/json:
@@ -352,6 +576,193 @@ paths:
                   error:
                     type: string
 
+  /api/geographicalResults:
+    get:
+      tags:
+        - Election Info
+      summary: Get geographical area results
+      description: Get vote aggregation by geographical area (demkhong/gewog/chewog/throm) with gender breakdown for all election types
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: electionId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: ID of the election
+          example: "TSHOGPA_2025"
+        - name: electionType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              [
+                NATIONAL_ASSEMBLY,
+                NATIONAL_COUNCIL,
+                GUP,
+                MANGMI,
+                TSHOGPA,
+                THROMPON,
+                THROMPON_TSHOGPA,
+              ]
+          description: Type of election (case-insensitive, accepts variations like 'nc', 'thrompoen')
+          example: "TSHOGPA"
+      responses:
+        "200":
+          description: Geographical results retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        location:
+                          type: string
+                          example: "Paro/Lungnyi/Tsento"
+                        locationDetails:
+                          type: object
+                          example:
+                            dzongkhag: "Paro"
+                            gewog: "Lungnyi"
+                            chewog: "Tsento"
+                        totalVotes:
+                          type: string
+                          example: "223"
+                        maleVotes:
+                          type: string
+                          example: "110"
+                        femaleVotes:
+                          type: string
+                          example: "113"
+                  electionType:
+                    type: string
+                    example: "TSHOGPA"
+                  locationLabel:
+                    type: string
+                    example: "Chewog"
+        "400":
+          description: Bad request
+        "404":
+          description: Election not found
+        "403":
+          description: Forbidden - admin only
+
+  /api/demkhongResults:
+    get:
+      tags:
+        - Election Info
+      summary: Get demkhong results (Legacy - redirects to geographicalResults)
+      description: Legacy endpoint for backward compatibility - retrieves geographical results
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: electionId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: ID of the election
+          example: "NA_2025"
+        - name: electionType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              [
+                NATIONAL_ASSEMBLY,
+                NATIONAL_COUNCIL,
+                GUP,
+                MANGMI,
+                TSHOGPA,
+                THROMPON,
+                THROMPON_TSHOGPA,
+              ]
+          description: Type of election (case-insensitive)
+      responses:
+        "200":
+          description: Results retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+        "404":
+          description: Election not found
+
+  /api/public-result/{electionId}:
+    get:
+      tags:
+        - Public
+      summary: Get public election results
+      description: Get election results (only available after election has ended)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: electionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID of the election
+          example: "NA_2025"
+        - name: electionType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              [
+                NATIONAL_ASSEMBLY,
+                NATIONAL_COUNCIL,
+                GUP,
+                MANGMI,
+                TSHOGPA,
+                THROMPON,
+                THROMPON_TSHOGPA,
+              ]
+          description: Type of election for structured location details (case-insensitive)
+      responses:
+        "200":
+          description: Public results retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        candidate:
+                          type: string
+                        location:
+                          type: string
+                        locationDetails:
+                          type: object
+                        votes:
+                          type: string
+                  totalVotes:
+                    type: string
+                  totalMale:
+                    type: string
+                  totalFemale:
+                    type: string
+        "403":
+          description: Election not yet ended
+        "404":
+          description: Election not found
 
 components:
   securitySchemes:

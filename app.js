@@ -1,44 +1,51 @@
 // app.js
-import express from 'express';
-import cors from 'cors';
-import bodyParser from 'body-parser';
-import swaggerUi from 'swagger-ui-express';
-import YAML from 'yamljs';
-import authRouter from './services/auth.js';
-import apiRouter from './services/contractService.js';
-import apiRouterNew from './services/new_contract.js';
+import express from "express";
+import cors from "cors";
+import bodyParser from "body-parser";
+import swaggerUi from "swagger-ui-express";
+import YAML from "yamljs";
+import authRouter from "./services/auth.js";
+import apiRouter from "./services/contractService.js";
+import apiRouterNew from "./services/new_contract.js";
+import demkhongApiRouter from "./services/demkhongAddedService.js";
 
-import { logger } from './utils/logger.js';
-import { networkInterfaces } from 'os';
-import morgan from 'morgan';
-import path from 'path';
-import fs from 'fs';
-import 'dotenv/config';
+import { logger } from "./utils/logger.js";
+import { networkInterfaces } from "os";
+import morgan from "morgan";
+import path from "path";
+import fs from "fs";
+import "dotenv/config";
 
-const logDirectory = path.resolve('logs');
+const logDirectory = path.resolve("logs");
 if (!fs.existsSync(logDirectory)) {
   fs.mkdirSync(logDirectory);
 }
 
-const accessLogStream = fs.createWriteStream(path.join(logDirectory, 'access.log'), { flags: 'a' });
+const accessLogStream = fs.createWriteStream(
+  path.join(logDirectory, "access.log"),
+  { flags: "a" }
+);
 
 const app = express();
 //const swaggerDocument = YAML.load('./utils/swagger.yaml');
-const swaggerDocument = YAML.load('./utils/swagger-new.yaml')
+const swaggerDocument = YAML.load("./utils/swagger-new.yaml");
 app.use(cors());
 app.use(bodyParser.json());
-app.use(morgan('combined', { stream: accessLogStream }));
-app.use(cors({
-  origin: ['https://evoting-p0zm.onrender.com', 'http://localhost:3001'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-app.use('/auth', authRouter);
-app.use('/api-old', apiRouter);
-app.use('/api', apiRouterNew);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+app.use(morgan("combined", { stream: accessLogStream }));
+app.use(
+  cors({
+    origin: ["https://evoting-p0zm.onrender.com", "http://localhost:3001"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+app.use("/auth", authRouter);
+app.use("/api-old", apiRouter);
+app.use("/api-v2", apiRouterNew);
+app.use("/api", demkhongApiRouter); // Production endpoint with multi-election support
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-app.get('/', (req, res) => {
+app.get("/", (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="en">
@@ -79,11 +86,11 @@ app.get('/', (req, res) => {
 app.use((err, req, res, next) => {
   logger.error(`${req.method} ${req.url} - ${err.message}`);
   console.error(err.stack);
-  res.status(500).json({ error: 'Internal Server Error' });
+  res.status(500).json({ error: "Internal Server Error" });
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, "0.0.0.0", () => {
   const localUrl = `http://localhost:${PORT}/api-docs`;
   const networkUrl = `http://${getLocalIpAddress()}:${PORT}/api-docs`;
   console.log(`✅ Server accessible at:`);
@@ -97,12 +104,10 @@ function getLocalIpAddress() {
   const interfaces = networkInterfaces();
   for (const name of Object.keys(interfaces)) {
     for (const interfaceInfo of interfaces[name]) {
-      if (interfaceInfo.family === 'IPv4' && !interfaceInfo.internal) {
+      if (interfaceInfo.family === "IPv4" && !interfaceInfo.internal) {
         return interfaceInfo.address;
       }
     }
   }
-  return 'localhost';
+  return "localhost";
 }
-
-
