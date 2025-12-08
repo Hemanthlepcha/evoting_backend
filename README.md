@@ -81,14 +81,6 @@ This will test:
 - Geographical aggregation
 - Backward compatibility
 
-## 🔑 Key Features
-
-✅ **No Smart Contract Changes** - Works with your existing deployed contract  
-✅ **Backward Compatible** - Old API calls still work  
-✅ **Flexible Locations** - Supports demkhong, gewog, and chewog hierarchies  
-✅ **Auto-Detection** - Automatically determines election type from location data  
-✅ **Type Safety** - Validates location data for each election type
-
 ## 📋 API Endpoints
 
 ### Main Production Endpoint: `/api/*`
@@ -104,11 +96,6 @@ This will test:
 | `/api/end`                 | POST   | End an election                                  |
 | `/api/checkVoted`          | GET    | Check if user voted                              |
 | `/api/public-result/:id`   | GET    | Public results (after election ends)             |
-
-### Legacy Endpoints (Still Available)
-
-- `/api-old/*` - Original API (contractService.js)
-- `/api-v2/*` - Alternative API (new_contract.js)
 
 ## 🔐 Authentication
 
@@ -219,32 +206,6 @@ The backend can be deployed to any Node.js hosting platform:
 2. Run `pnpm install` or `npm install`
 3. Run `pnpm start` or `npm start`
 
-No smart contract redeployment needed!
-
-## 📝 Migration from Old Format
-
-Your existing code will continue to work! To use new features:
-
-**Old format:**
-
-```javascript
-{
-  "demkhong": "Thimphu"
-}
-```
-
-**New format (recommended):**
-
-```javascript
-{
-  "location": {
-    "dzongkhag": "Thimphu",
-    "demkhong": "Thimphu"
-  },
-  "electionType": "NATIONAL_ASSEMBLY"
-}
-```
-
 ## 🐛 Troubleshooting
 
 ### Server won't start
@@ -272,7 +233,3 @@ For detailed information:
 - See [API_EXAMPLES.md](./API_EXAMPLES.md) for usage examples
 - See [IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md) for technical details
 - Check Swagger UI at `http://localhost:3001/api-docs`
-
-## 📄 License
-
-[Your License Here]
