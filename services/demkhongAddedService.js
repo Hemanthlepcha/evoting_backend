@@ -41,7 +41,7 @@ router.post("/register", async (req, res) => {
 
   try {
     if (location) {
-      // New format: location object with dzongkhag, gewog, chiwog, demkhong, throm, or thromde
+      // New format: location object with dzongkhag, gewog, chiwog, demkhong, or thromde
       detectedElectionType = electionType
         ? normalizeElectionType(electionType)
         : detectElectionType(location);
@@ -49,7 +49,7 @@ router.post("/register", async (req, res) => {
       if (!detectedElectionType) {
         return res.status(400).json({
           error: "Cannot determine election type from location",
-          hint: "Provide electionType or include demkhong/gewog/chiwog/throm/thromde in location",
+          hint: "Provide electionType or include demkhong/gewog/chiwog/thromde in location",
         });
       }
 
@@ -296,13 +296,12 @@ router.get("/votesByElection", async (req, res) => {
 
     // Build filter location string based on provided query params
     let filterLocationString = null;
-    if (dzongkhag || gewog || chiwog || demkhong || throm || thromde) {
+    if (dzongkhag || gewog || chiwog || demkhong || thromde) {
       const filterLocation = {
         dzongkhag,
         gewog,
         chiwog,
         demkhong,
-        throm,
         thromde,
       };
 
@@ -410,7 +409,7 @@ router.get("/votesByElection", async (req, res) => {
   }
 });
 
-// Get geographical area results (demkhong/gewog/chiwog/throm/thromde)
+// Get geographical area results (demkhong/gewog/chiwog/thromde)
 router.get("/geographicalResults", async (req, res) => {
   let { electionId, electionType } = req.query;
 

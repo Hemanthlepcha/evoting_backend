@@ -67,7 +67,7 @@ export function getRequiredLocationFields(electionType) {
     case ELECTION_TYPES.C_TSHOGPA:
       return ["dzongkhag", "gewog", "chiwog"];
     case ELECTION_TYPES.THROMPOEN:
-      return ["throm"];
+      return ["dzongkhag", "thromde"];
     case ELECTION_TYPES.T_TSHOGPA:
       return ["dzongkhag", "thromde"];
     default:
@@ -101,7 +101,8 @@ export function buildLocationString(location, electionType) {
       if (location.chiwog) parts.push(location.chiwog);
       break;
     case ELECTION_TYPES.THROMPOEN:
-      if (location.throm) parts.push(location.throm);
+      if (location.dzongkhag) parts.push(location.dzongkhag);
+      if (location.thromde) parts.push(location.thromde);
       break;
     case ELECTION_TYPES.T_TSHOGPA:
       if (location.dzongkhag) parts.push(location.dzongkhag);
@@ -113,7 +114,6 @@ export function buildLocationString(location, electionType) {
       if (location.gewog) parts.push(location.gewog);
       if (location.chiwog) parts.push(location.chiwog);
       if (location.demkhong) parts.push(location.demkhong);
-      if (location.throm) parts.push(location.throm);
       if (location.thromde) parts.push(location.thromde);
   }
 
@@ -151,7 +151,8 @@ export function parseLocationString(locationStr, electionType) {
       };
     case ELECTION_TYPES.THROMPOEN:
       return {
-        throm: parts[0] || "",
+        dzongkhag: parts[0] || "",
+        thromde: parts[1] || "",
       };
     case ELECTION_TYPES.T_TSHOGPA:
       return {
@@ -169,10 +170,10 @@ export function parseLocationString(locationStr, electionType) {
 export function detectElectionType(location) {
   if (location.demkhong) {
     return ELECTION_TYPES.NA;
-  } else if (location.throm) {
-    return ELECTION_TYPES.THROMPOEN;
-  } else if (location.thromde) {
-    return ELECTION_TYPES.T_TSHOGPA;
+  } else if (location.dzongkhag && location.thromde) {
+    // Both THROMPOEN and T_TSHOGPA use dzongkhag + thromde
+    // Cannot auto-detect between them - electionType must be explicitly provided
+    return null;
   } else if (location.chiwog) {
     return ELECTION_TYPES.C_TSHOGPA;
   } else if (location.gewog) {
@@ -216,7 +217,7 @@ export function getLocationLabel(electionType) {
     case ELECTION_TYPES.C_TSHOGPA:
       return "Chiwog";
     case ELECTION_TYPES.THROMPOEN:
-      return "Throm";
+      return "Thromde";
     case ELECTION_TYPES.T_TSHOGPA:
       return "Thromde";
     default:

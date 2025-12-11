@@ -79,14 +79,10 @@ paths:
                       type: string
                       description: Chiwog name (for C_Tshogpa only)
                       example: "Babesa"
-                    throm:
-                      type: string
-                      description: Throm/Municipality name (for Thrompon)
-                      example: "Thimphu Thromde"
                     thromde:
                       type: string
-                      description: Thromde/Municipality name (for T_Tshogpa)
-                      example: "Phuentsholing Thromde"
+                      description: Thromde/Municipality name (for THROMPOEN and T_TSHOGPA)
+                      example: "Thimphu Thromde"
                 electionType:
                   type: string
                   description: Type of election (optional - can be auto-detected, case-insensitive)
@@ -127,7 +123,7 @@ paths:
                     dzongkhag: "Paro"
                   electionType: "NC"
               gupElection:
-                summary: Gup Election
+                summary: Gup Election (GUP)
                 value:
                   electionId: "GUP_2025_THIMPHU"
                   candidate: "Karma Wangchuk"
@@ -135,6 +131,15 @@ paths:
                     dzongkhag: "Paro"
                     gewog: "Lungnyi"
                   electionType: "GUP"
+              mangmiElection:
+                summary: Mangmi Election (MANGMI)
+                value:
+                  electionId: "MANGMI_2025_PARO"
+                  candidate: "Dorji Wangmo"
+                  location:
+                    dzongkhag: "Paro"
+                    gewog: "Lungnyi"
+                  electionType: "MANGMI"
               chiwogTshogpaElection:
                 summary: Chiwog Tshogpa Election (C_TSHOGPA)
                 value:
@@ -151,7 +156,8 @@ paths:
                   electionId: "THROM_2025"
                   candidate: "Ugyen Dorji"
                   location:
-                    throm: "Thimphu Thromde"
+                    dzongkhag: "Thimphu"
+                    thromde: "Thimphu Thromde"
                   electionType: "THROMPOEN"
               thromponTshogpaElection:
                 summary: Thrompon Tshogpa Election (T_TSHOGPA)
@@ -478,7 +484,7 @@ paths:
         - **NC (National Council):** Filter by `dzongkhag` only
         - **GUP/MANGMI:** Filter by `dzongkhag` and/or `gewog`
         - **C_TSHOGPA (Chiwog Tshogpa):** Filter by `dzongkhag`, `gewog`, and/or `chiwog`
-        - **THROMPOEN (Thrompon):** Filter by `throm`
+        - **THROMPOEN (Thrompon):** Filter by `dzongkhag` and/or `thromde`
         - **T_TSHOGPA (Thrompon Tshogpa):** Filter by `dzongkhag` and/or `thromde`
         
         **Examples:**
@@ -541,19 +547,12 @@ paths:
           description: "**[NA only]** Filter by Demkhong (use with dzongkhag)"
           example: "Thimphu"
         - in: query
-          name: throm
-          required: false
-          schema:
-            type: string
-          description: "**[THROMPOEN only]** Filter by Throm"
-          example: "Thimphu Thromde"
-        - in: query
           name: thromde
           required: false
           schema:
             type: string
-          description: "**[T_TSHOGPA only]** Filter by Thromde (use with dzongkhag)"
-          example: "Phuentsholing Thromde"
+          description: "**[THROMPOEN, T_TSHOGPA]** Filter by Thromde (use with dzongkhag)"
+          example: "Thimphu Thromde"
       responses:
         "200":
           description: Vote counts retrieved successfully
@@ -660,7 +659,7 @@ paths:
       tags:
         - Election Info
       summary: Get geographical area results
-      description: Get vote aggregation by geographical area (demkhong/gewog/chiwog/throm/thromde) with gender breakdown for all election types
+      description: Get vote aggregation by geographical area (demkhong/gewog/chiwog/thromde) with gender breakdown for all election types
       security:
         - bearerAuth: []
       parameters:
