@@ -41,7 +41,7 @@ router.post("/register", async (req, res) => {
 
   try {
     if (location) {
-      // New format: location object with dzongkhag, gewog, chewog, demkhong, or throm
+      // New format: location object with dzongkhag, gewog, chiwog, demkhong, throm, or thromde
       detectedElectionType = electionType
         ? normalizeElectionType(electionType)
         : detectElectionType(location);
@@ -49,7 +49,7 @@ router.post("/register", async (req, res) => {
       if (!detectedElectionType) {
         return res.status(400).json({
           error: "Cannot determine election type from location",
-          hint: "Provide electionType or include demkhong/gewog/chewog/throm in location",
+          hint: "Provide electionType or include demkhong/gewog/chiwog/throm/thromde in location",
         });
       }
 
@@ -67,7 +67,7 @@ router.post("/register", async (req, res) => {
     } else if (req.body.demkhong) {
       // Backward compatibility: old format with just demkhong
       locationString = req.body.demkhong;
-      detectedElectionType = ELECTION_TYPES.NATIONAL_ASSEMBLY;
+      detectedElectionType = ELECTION_TYPES.NA;
       logger.info(`Using legacy demkhong format for candidate: ${candidate}`);
     } else {
       return res.status(400).json({
@@ -152,26 +152,36 @@ router.delete("/remove", async (req, res) => {
 
 // Cast a vote
 router.post("/vote", async (req, res) => {
-  const { electionId, uid, candidate, gender } = req.body;
+  const { electionId, uid, candidate, gender, pollingStation } = req.body;
 
-  if (!electionId || !uid || !candidate || !gender) {
+  if (!electionId || !uid || !candidate || !gender || !pollingStation) {
     return res.status(400).send({
-      error: "Missing required fields: electionId, uid, candidate, or gender",
+      error:
+        "Missing required fields: electionId, uid, candidate, gender, or pollingStation",
     });
   }
 
   try {
     const hashedUid = hashUid(uid);
-    const tx = await contract.vote(electionId, hashedUid, candidate, gender);
+    const tx = await contract.vote(
+      electionId,
+      hashedUid,
+      candidate,
+      gender,
+      pollingStation
+    );
     const receipt = await tx.wait();
 
     const txStatus = receipt.status === 1 ? "success" : "fail";
-    logger.info(`Vote cast | Tx: ${tx.hash} | Status: ${txStatus}`);
+    logger.info(
+      `Vote cast | Tx: ${tx.hash} | Status: ${txStatus} | Polling Station: ${pollingStation}`
+    );
 
     res.send({
       message: "Vote cast successfully",
       txHash: tx.hash,
       txStatus,
+      pollingStation,
       explorerLink: `https://amoy.polygonscan.com/tx/${tx.hash}`,
     });
   } catch (err) {
@@ -250,7 +260,16 @@ router.get("/elections", async (req, res) => {
 
 // Admin-only result view with enhanced data
 router.get("/votesByElection", async (req, res) => {
-  let { electionId, electionType } = req.query;
+  let {
+    electionId,
+    electionType,
+    dzongkhag,
+    gewog,
+    chiwog,
+    demkhong,
+    throm,
+    thromde,
+  } = req.query;
 
   if (!electionId) {
     return res
@@ -275,31 +294,97 @@ router.get("/votesByElection", async (req, res) => {
       totalFemale,
     ] = await contract.getCandidateVotesAndTotalElectionVotes(electionId);
 
-    const results = candidates.map((candidate, index) => {
-      const locationStr = locationStrings[index];
-      let locationDetails = {};
-
-      if (electionType) {
-        locationDetails = parseLocationString(locationStr, electionType);
-      } else {
-        // If electionType not provided, include raw location string
-        locationDetails = { location: locationStr };
-      }
-
-      return {
-        candidate,
-        location: locationStr,
-        locationDetails,
-        votes: candidateVotes[index].toString(),
+    // Build filter location string based on provided query params
+    let filterLocationString = null;
+    if (dzongkhag || gewog || chiwog || demkhong || throm || thromde) {
+      const filterLocation = {
+        dzongkhag,
+        gewog,
+        chiwog,
+        demkhong,
+        throm,
+        thromde,
       };
-    });
+
+      // Remove undefined values
+      Object.keys(filterLocation).forEach(
+        (key) => filterLocation[key] === undefined && delete filterLocation[key]
+      );
+
+      if (electionType && Object.keys(filterLocation).length > 0) {
+        filterLocationString = buildLocationString(
+          filterLocation,
+          electionType
+        );
+      }
+    }
+
+    // Fetch polling station breakdown for each candidate
+    let allResults = await Promise.all(
+      candidates.map(async (candidate, index) => {
+        const locationStr = locationStrings[index];
+        let locationDetails = {};
+
+        if (electionType) {
+          locationDetails = parseLocationString(locationStr, electionType);
+        } else {
+          // If electionType not provided, include raw location string
+          locationDetails = { location: locationStr };
+        }
+
+        // Get polling station breakdown for this candidate
+        const [pollingStations, votesPerStation] =
+          await contract.getCandidatePollingStationVotes(electionId, candidate);
+
+        // Convert to object format: { "PS1": "12", "PS2": "29" }
+        const votesByPollingStation = {};
+        pollingStations.forEach((ps, idx) => {
+          votesByPollingStation[ps] = votesPerStation[idx].toString();
+        });
+
+        return {
+          candidate,
+          location: locationStr,
+          locationDetails,
+          votes: votesByPollingStation,
+          totalVotes: candidateVotes[index].toString(),
+        };
+      })
+    );
+
+    // Filter results based on location if filterLocationString is provided
+    let results = allResults;
+    if (filterLocationString) {
+      results = allResults.filter((result) => {
+        // Check if candidate's location starts with the filter location
+        // This allows hierarchical filtering (dzongkhag filters all gewogs within it, etc.)
+        return result.location.startsWith(filterLocationString);
+      });
+
+      logger.info(
+        `Filtered results for election: ${electionId}, location: ${filterLocationString}, found: ${results.length} candidates`
+      );
+    }
+
+    // Recalculate totals based on filtered results
+    let filteredTotalVotes = 0;
+    if (filterLocationString && results.length > 0) {
+      results.forEach((result) => {
+        filteredTotalVotes += parseInt(result.totalVotes);
+      });
+    } else {
+      filteredTotalVotes = totalVotes;
+    }
 
     logger.info(`Admin fetched results for election: ${electionId}`);
     res.json({
       results,
-      totalVotes: totalVotes.toString(),
+      totalVotes: filterLocationString
+        ? filteredTotalVotes.toString()
+        : totalVotes.toString(),
       totalMale: totalMale.toString(),
       totalFemale: totalFemale.toString(),
+      filteredBy: filterLocationString || null,
     });
   } catch (err) {
     if (err.message.includes("Election ID does not exist")) {
@@ -325,7 +410,7 @@ router.get("/votesByElection", async (req, res) => {
   }
 });
 
-// Get geographical area results (demkhong/gewog/chewog/throm)
+// Get geographical area results (demkhong/gewog/chiwog/throm/thromde)
 router.get("/geographicalResults", async (req, res) => {
   let { electionId, electionType } = req.query;
 
@@ -408,8 +493,7 @@ router.get("/geographicalResults", async (req, res) => {
 // Legacy endpoint for backward compatibility
 router.get("/demkhongResults", async (req, res) => {
   // Redirect to the new geographicalResults endpoint
-  req.query.electionType =
-    req.query.electionType || ELECTION_TYPES.NATIONAL_ASSEMBLY;
+  req.query.electionType = req.query.electionType || ELECTION_TYPES.NA;
   return geographicalResultsHandler(req, res);
 });
 
@@ -511,24 +595,38 @@ router.get("/public-result/:electionId", async (req, res) => {
       totalFemale,
     ] = await contract.getCandidateVotesAndTotalElectionVotes(electionId);
 
-    const results = candidates.map((candidate, index) => {
-      const locationStr = locationStrings[index];
-      let locationDetails = {};
+    // Fetch polling station breakdown for each candidate
+    const results = await Promise.all(
+      candidates.map(async (candidate, index) => {
+        const locationStr = locationStrings[index];
+        let locationDetails = {};
 
-      if (electionType) {
-        locationDetails = parseLocationString(locationStr, electionType);
-      } else {
-        locationDetails = { location: locationStr };
-      }
+        if (electionType) {
+          locationDetails = parseLocationString(locationStr, electionType);
+        } else {
+          locationDetails = { location: locationStr };
+        }
 
-      return {
-        candidate,
-        location: locationStr,
-        locationDetails,
-        demkhong: locationStr, // backward compatibility
-        votes: candidateVotes[index].toString(),
-      };
-    });
+        // Get polling station breakdown for this candidate
+        const [pollingStations, votesPerStation] =
+          await contract.getCandidatePollingStationVotes(electionId, candidate);
+
+        // Convert to object format: { "PS1": "12", "PS2": "29" }
+        const votesByPollingStation = {};
+        pollingStations.forEach((ps, idx) => {
+          votesByPollingStation[ps] = votesPerStation[idx].toString();
+        });
+
+        return {
+          candidate,
+          location: locationStr,
+          locationDetails,
+          demkhong: locationStr, // backward compatibility
+          votes: votesByPollingStation,
+          totalVotes: candidateVotes[index].toString(),
+        };
+      })
+    );
 
     logger.info(`Public results fetched for election: ${electionId}`);
     res.json({

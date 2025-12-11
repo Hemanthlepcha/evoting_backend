@@ -73,30 +73,34 @@ paths:
                       example: "Thimphu"
                     gewog:
                       type: string
-                      description: Gewog name (for Gup/Mangmi/Tshogpa)
+                      description: Gewog name (for Gup/Mangmi/C_Tshogpa)
                       example: "Chang"
-                    chewog:
+                    chiwog:
                       type: string
-                      description: Chewog name (for Tshogpa only)
+                      description: Chiwog name (for C_Tshogpa only)
                       example: "Babesa"
                     throm:
                       type: string
-                      description: Throm/Municipality name (for Thrompon/Thrompon Tshogpa)
+                      description: Throm/Municipality name (for Thrompon)
                       example: "Thimphu Thromde"
+                    thromde:
+                      type: string
+                      description: Thromde/Municipality name (for T_Tshogpa)
+                      example: "Phuentsholing Thromde"
                 electionType:
                   type: string
                   description: Type of election (optional - can be auto-detected, case-insensitive)
                   enum:
                     [
-                      NATIONAL_ASSEMBLY,
-                      NATIONAL_COUNCIL,
+                      NA,
+                      NC,
                       GUP,
                       MANGMI,
-                      TSHOGPA,
-                      THROMPON,
-                      THROMPON_TSHOGPA,
+                      C_TSHOGPA,
+                      THROMPOEN,
+                      T_TSHOGPA,
                     ]
-                  example: "NATIONAL_ASSEMBLY"
+                  example: "NA"
                 demkhong:
                   type: string
                   description: Legacy format - demkhong only (still supported for backward compatibility)
@@ -106,22 +110,22 @@ paths:
                 - candidate
             examples:
               nationalAssembly:
-                summary: National Assembly Election
+                summary: National Assembly Election (NA)
                 value:
                   electionId: "NA_2025"
                   candidate: "Tshering Dorji"
                   location:
                     dzongkhag: "Thimphu"
                     demkhong: "Thimphu"
-                  electionType: "NATIONAL_ASSEMBLY"
+                  electionType: "NA"
               nationalCouncil:
-                summary: National Council Election
+                summary: National Council Election (NC)
                 value:
                   electionId: "NC_2025"
                   candidate: "Sonam Phuntsho"
                   location:
                     dzongkhag: "Paro"
-                  electionType: "nc" # Case-insensitive
+                  electionType: "NC"
               gupElection:
                 summary: Gup Election
                 value:
@@ -130,33 +134,34 @@ paths:
                   location:
                     dzongkhag: "Paro"
                     gewog: "Lungnyi"
-                  electionType: "gup" # Case-insensitive
-              tshogpaElection:
-                summary: Tshogpa Election
+                  electionType: "GUP"
+              chiwogTshogpaElection:
+                summary: Chiwog Tshogpa Election (C_TSHOGPA)
                 value:
-                  electionId: "TSHOGPA_2025"
+                  electionId: "C_TSHOGPA_2025"
                   candidate: "Pema Thinley"
                   location:
                     dzongkhag: "Paro"
                     gewog: "Lungnyi"
-                    chewog: "Tsento"
-                  electionType: "TSHOGPA"
+                    chiwog: "Tsento"
+                  electionType: "C_TSHOGPA"
               thromponElection:
-                summary: Thrompon Election
+                summary: Thrompon Election (THROMPOEN)
                 value:
                   electionId: "THROM_2025"
                   candidate: "Ugyen Dorji"
                   location:
                     throm: "Thimphu Thromde"
-                  electionType: "thrompoen" # Alternative spelling accepted
+                  electionType: "THROMPOEN"
               thromponTshogpaElection:
-                summary: Thrompon Tshogpa Election
+                summary: Thrompon Tshogpa Election (T_TSHOGPA)
                 value:
-                  electionId: "THROM_TSH_2025"
+                  electionId: "T_TSHOGPA_2025"
                   candidate: "Dawa Tshering"
                   location:
-                    throm: "Phuentsholing Thromde"
-                  electionType: "THROMPON_TSHOGPA"
+                    dzongkhag: "Thimphu"
+                    thromde: "Phuentsholing Thromde"
+                  electionType: "T_TSHOGPA"
               legacyFormat:
                 summary: Legacy Format (Backward Compatible)
                 value:
@@ -179,7 +184,7 @@ paths:
                     example: "Tshering Dorji"
                   electionType:
                     type: string
-                    example: "NATIONAL_ASSEMBLY"
+                    example: "NA"
                   location:
                     type: string
                     example: "Thimphu/Thimphu"
@@ -268,7 +273,7 @@ paths:
       tags:
         - Voting
       summary: Cast a vote
-      description: Cast a vote in an election (works for all election types)
+      description: Cast a vote in an election with polling station tracking (works for all election types)
       security:
         - bearerAuth: []
       requestBody:
@@ -295,11 +300,16 @@ paths:
                   description: Gender of the voter
                   enum: [Male, Female]
                   example: "Male"
+                pollingStation:
+                  type: string
+                  description: Polling station identifier where the vote was cast
+                  example: "PS_Thimphu_01"
               required:
                 - electionId
                 - uid
                 - candidate
                 - gender
+                - pollingStation
       responses:
         "200":
           description: Vote cast successfully
@@ -314,9 +324,12 @@ paths:
                   txHash:
                     type: string
                     example: "0xdef456..."
-                  txStatus:
+                    txStatus:
                     type: string
                     example: "success"
+                  pollingStation:
+                    type: string
+                    example: "PS_Thimphu_01"
                   explorerLink:
                     type: string
                     example: "https://amoy.polygonscan.com/tx/0xdef456..."
@@ -455,8 +468,23 @@ paths:
     get:
       tags:
         - Election Info
-      summary: Get candidate vote counts with location details
-      description: Retrieve detailed voting results with structured location information for all election types
+      summary: Get candidate vote counts with polling station breakdown and location filtering
+      description: |
+        Retrieve detailed voting results with polling station breakdown and structured location information. 
+        
+        **Location Filtering (Hierarchical):**
+        
+        - **NA (National Assembly):** Filter by `dzongkhag` and/or `demkhong`
+        - **NC (National Council):** Filter by `dzongkhag` only
+        - **GUP/MANGMI:** Filter by `dzongkhag` and/or `gewog`
+        - **C_TSHOGPA (Chiwog Tshogpa):** Filter by `dzongkhag`, `gewog`, and/or `chiwog`
+        - **THROMPOEN (Thrompon):** Filter by `throm`
+        - **T_TSHOGPA (Thrompon Tshogpa):** Filter by `dzongkhag` and/or `thromde`
+        
+        **Examples:**
+        - Get all C_TSHOGPA from Tsirang: `?electionType=C_TSHOGPA&dzongkhag=Tsirang`
+        - Get C_TSHOGPA from specific Gewog: `?electionType=C_TSHOGPA&dzongkhag=Tsirang&gewog=Phuntenchu`
+        - Get C_TSHOGPA from specific Chiwog: `?electionType=C_TSHOGPA&dzongkhag=Tsirang&gewog=Phuntenchu&chiwog=Trashicholing`
       security:
         - bearerAuth: []
       parameters:
@@ -466,7 +494,7 @@ paths:
           schema:
             type: string
           description: ID of the election
-          example: "GUP_2025_THIMPHU"
+          example: "C_TSHOGPA_2025"
         - in: query
           name: electionType
           required: false
@@ -474,16 +502,58 @@ paths:
             type: string
             enum:
               [
-                NATIONAL_ASSEMBLY,
-                NATIONAL_COUNCIL,
+                NA,
+                NC,
                 GUP,
                 MANGMI,
-                TSHOGPA,
-                THROMPON,
-                THROMPON_TSHOGPA,
+                C_TSHOGPA,
+                THROMPOEN,
+                T_TSHOGPA,
               ]
-          description: Type of election (recommended for structured location details, case-insensitive)
-          example: "GUP"
+          description: Type of election (required for location filtering)
+          example: "C_TSHOGPA"
+        - in: query
+          name: dzongkhag
+          required: false
+          schema:
+            type: string
+          description: "**[NA, NC, GUP, MANGMI, C_TSHOGPA, T_TSHOGPA]** Filter by Dzongkhag"
+          example: "Tsirang"
+        - in: query
+          name: gewog
+          required: false
+          schema:
+            type: string
+          description: "**[GUP, MANGMI, C_TSHOGPA]** Filter by Gewog (use with dzongkhag)"
+          example: "Phuntenchu"
+        - in: query
+          name: chiwog
+          required: false
+          schema:
+            type: string
+          description: "**[C_TSHOGPA only]** Filter by Chiwog (use with dzongkhag + gewog)"
+          example: "Trashicholing"
+        - in: query
+          name: demkhong
+          required: false
+          schema:
+            type: string
+          description: "**[NA only]** Filter by Demkhong (use with dzongkhag)"
+          example: "Thimphu"
+        - in: query
+          name: throm
+          required: false
+          schema:
+            type: string
+          description: "**[THROMPOEN only]** Filter by Throm"
+          example: "Thimphu Thromde"
+        - in: query
+          name: thromde
+          required: false
+          schema:
+            type: string
+          description: "**[T_TSHOGPA only]** Filter by Thromde (use with dzongkhag)"
+          example: "Phuentsholing Thromde"
       responses:
         "200":
           description: Vote counts retrieved successfully
@@ -510,6 +580,13 @@ paths:
                             dzongkhag: "Paro"
                             gewog: "Lungnyi"
                         votes:
+                          type: object
+                          description: Vote breakdown by polling station
+                          example:
+                            PS_Paro_01: "120"
+                            PS_Paro_02: "185"
+                            PS_Paro_03: "145"
+                        totalVotes:
                           type: string
                           example: "450"
                   totalVotes:
@@ -583,7 +660,7 @@ paths:
       tags:
         - Election Info
       summary: Get geographical area results
-      description: Get vote aggregation by geographical area (demkhong/gewog/chewog/throm) with gender breakdown for all election types
+      description: Get vote aggregation by geographical area (demkhong/gewog/chiwog/throm/thromde) with gender breakdown for all election types
       security:
         - bearerAuth: []
       parameters:
@@ -593,7 +670,7 @@ paths:
           schema:
             type: string
           description: ID of the election
-          example: "TSHOGPA_2025"
+          example: "C_TSHOGPA_2025"
         - name: electionType
           in: query
           required: false
@@ -601,16 +678,16 @@ paths:
             type: string
             enum:
               [
-                NATIONAL_ASSEMBLY,
-                NATIONAL_COUNCIL,
+                NA,
+                NC,
                 GUP,
                 MANGMI,
-                TSHOGPA,
-                THROMPON,
-                THROMPON_TSHOGPA,
+                C_TSHOGPA,
+                THROMPOEN,
+                T_TSHOGPA,
               ]
-          description: Type of election (case-insensitive, accepts variations like 'nc', 'thrompoen')
-          example: "TSHOGPA"
+          description: Type of election (case-insensitive)
+          example: "C_TSHOGPA"
       responses:
         "200":
           description: Geographical results retrieved successfully
@@ -632,7 +709,7 @@ paths:
                           example:
                             dzongkhag: "Paro"
                             gewog: "Lungnyi"
-                            chewog: "Tsento"
+                            chiwog: "Tsento"
                         totalVotes:
                           type: string
                           example: "223"
@@ -644,10 +721,10 @@ paths:
                           example: "113"
                   electionType:
                     type: string
-                    example: "TSHOGPA"
+                    example: "C_TSHOGPA"
                   locationLabel:
                     type: string
-                    example: "Chewog"
+                    example: "Chiwog"
         "400":
           description: Bad request
         "404":
@@ -678,13 +755,13 @@ paths:
             type: string
             enum:
               [
-                NATIONAL_ASSEMBLY,
-                NATIONAL_COUNCIL,
+                NA,
+                NC,
                 GUP,
                 MANGMI,
-                TSHOGPA,
-                THROMPON,
-                THROMPON_TSHOGPA,
+                C_TSHOGPA,
+                THROMPOEN,
+                T_TSHOGPA,
               ]
           description: Type of election (case-insensitive)
       responses:
@@ -725,13 +802,13 @@ paths:
             type: string
             enum:
               [
-                NATIONAL_ASSEMBLY,
-                NATIONAL_COUNCIL,
+                NA,
+                NC,
                 GUP,
                 MANGMI,
-                TSHOGPA,
-                THROMPON,
-                THROMPON_TSHOGPA,
+                C_TSHOGPA,
+                THROMPOEN,
+                T_TSHOGPA,
               ]
           description: Type of election for structured location details (case-insensitive)
       responses:
@@ -754,13 +831,22 @@ paths:
                         locationDetails:
                           type: object
                         votes:
+                          type: object
+                          description: Vote breakdown by polling station
+                        totalVotes:
                           type: string
                   totalVotes:
                     type: string
+                    description: Total votes (filtered if location params provided)
                   totalMale:
                     type: string
                   totalFemale:
                     type: string
+                  filteredBy:
+                    type: string
+                    nullable: true
+                    description: Location string used for filtering (null if no filter applied)
+                    example: "Tsirang/Phuntenchu"
         "403":
           description: Election not yet ended
         "404":

@@ -4,13 +4,13 @@
  */
 
 export const ELECTION_TYPES = {
-  NATIONAL_ASSEMBLY: "NATIONAL_ASSEMBLY",
-  NATIONAL_COUNCIL: "NATIONAL_COUNCIL",
-  GUP: "GUP",
-  MANGMI: "MANGMI",
-  TSHOGPA: "TSHOGPA",
-  THROMPON: "THROMPON",
-  THROMPON_TSHOGPA: "THROMPON_TSHOGPA",
+  NA: "NA", // National Assembly
+  NC: "NC", // National Council
+  GUP: "GUP", // Gup
+  MANGMI: "MANGMI", // Mangmi
+  C_TSHOGPA: "C_TSHOGPA", // Chiwog Tshogpa
+  THROMPOEN: "THROMPOEN", // Thrompon
+  T_TSHOGPA: "T_TSHOGPA", // Thrompon Tshogpa
 };
 
 /**
@@ -23,13 +23,18 @@ export function normalizeElectionType(type) {
 
   // Map common variations to standard types
   const variations = {
-    NC: "NATIONAL_COUNCIL",
-    NATIONALCOUNCIL: "NATIONAL_COUNCIL",
-    NA: "NATIONAL_ASSEMBLY",
-    NATIONALASSEMBLY: "NATIONAL_ASSEMBLY",
-    THROMPOEN: "THROMPON",
-    THROMPOENTSHOGPA: "THROMPON_TSHOGPA",
-    THROMPOEN_TSHOGPA: "THROMPON_TSHOGPA",
+    NATIONAL_ASSEMBLY: "NA",
+    NATIONALASSEMBLY: "NA",
+    NATIONAL_COUNCIL: "NC",
+    NATIONALCOUNCIL: "NC",
+    TSHOGPA: "C_TSHOGPA",
+    CHIWOG_TSHOGPA: "C_TSHOGPA",
+    CHIWOGTSHOGPA: "C_TSHOGPA",
+    THROMPON: "THROMPOEN",
+    THROMPON_TSHOGPA: "T_TSHOGPA",
+    THROMPONTSHOGPA: "T_TSHOGPA",
+    THROMPOEN_TSHOGPA: "T_TSHOGPA",
+    THROMPOENTSHOGPA: "T_TSHOGPA",
   };
 
   // Check if it's a variation
@@ -52,37 +57,37 @@ export function getRequiredLocationFields(electionType) {
   const normalized = normalizeElectionType(electionType);
 
   switch (normalized) {
-    case ELECTION_TYPES.NATIONAL_ASSEMBLY:
+    case ELECTION_TYPES.NA:
       return ["dzongkhag", "demkhong"];
-    case ELECTION_TYPES.NATIONAL_COUNCIL:
+    case ELECTION_TYPES.NC:
       return ["dzongkhag"];
     case ELECTION_TYPES.GUP:
     case ELECTION_TYPES.MANGMI:
       return ["dzongkhag", "gewog"];
-    case ELECTION_TYPES.TSHOGPA:
-      return ["dzongkhag", "gewog", "chewog"];
-    case ELECTION_TYPES.THROMPON:
-    case ELECTION_TYPES.THROMPON_TSHOGPA:
+    case ELECTION_TYPES.C_TSHOGPA:
+      return ["dzongkhag", "gewog", "chiwog"];
+    case ELECTION_TYPES.THROMPOEN:
       return ["throm"];
+    case ELECTION_TYPES.T_TSHOGPA:
+      return ["dzongkhag", "thromde"];
     default:
       return [];
   }
 }
-
 /**
  * Build hierarchical location string from location object
- * Format: "Dzongkhag/Gewog/Chewog" or "Dzongkhag/Demkhong" etc.
+ * Format: "Dzongkhag/Gewog/Chiwog" or "Dzongkhag/Demkhong" etc.
  */
 export function buildLocationString(location, electionType) {
   const parts = [];
   const normalized = normalizeElectionType(electionType);
 
   switch (normalized) {
-    case ELECTION_TYPES.NATIONAL_ASSEMBLY:
+    case ELECTION_TYPES.NA:
       if (location.dzongkhag) parts.push(location.dzongkhag);
       if (location.demkhong) parts.push(location.demkhong);
       break;
-    case ELECTION_TYPES.NATIONAL_COUNCIL:
+    case ELECTION_TYPES.NC:
       if (location.dzongkhag) parts.push(location.dzongkhag);
       break;
     case ELECTION_TYPES.GUP:
@@ -90,22 +95,26 @@ export function buildLocationString(location, electionType) {
       if (location.dzongkhag) parts.push(location.dzongkhag);
       if (location.gewog) parts.push(location.gewog);
       break;
-    case ELECTION_TYPES.TSHOGPA:
+    case ELECTION_TYPES.C_TSHOGPA:
       if (location.dzongkhag) parts.push(location.dzongkhag);
       if (location.gewog) parts.push(location.gewog);
-      if (location.chewog) parts.push(location.chewog);
+      if (location.chiwog) parts.push(location.chiwog);
       break;
-    case ELECTION_TYPES.THROMPON:
-    case ELECTION_TYPES.THROMPON_TSHOGPA:
+    case ELECTION_TYPES.THROMPOEN:
       if (location.throm) parts.push(location.throm);
+      break;
+    case ELECTION_TYPES.T_TSHOGPA:
+      if (location.dzongkhag) parts.push(location.dzongkhag);
+      if (location.thromde) parts.push(location.thromde);
       break;
     default:
       // Fallback: use whatever is provided
       if (location.dzongkhag) parts.push(location.dzongkhag);
       if (location.gewog) parts.push(location.gewog);
-      if (location.chewog) parts.push(location.chewog);
+      if (location.chiwog) parts.push(location.chiwog);
       if (location.demkhong) parts.push(location.demkhong);
       if (location.throm) parts.push(location.throm);
+      if (location.thromde) parts.push(location.thromde);
   }
 
   return parts.join("/");
@@ -119,12 +128,12 @@ export function parseLocationString(locationStr, electionType) {
   const normalized = normalizeElectionType(electionType);
 
   switch (normalized) {
-    case ELECTION_TYPES.NATIONAL_ASSEMBLY:
+    case ELECTION_TYPES.NA:
       return {
         dzongkhag: parts[0] || "",
         demkhong: parts[1] || "",
       };
-    case ELECTION_TYPES.NATIONAL_COUNCIL:
+    case ELECTION_TYPES.NC:
       return {
         dzongkhag: parts[0] || "",
       };
@@ -134,16 +143,20 @@ export function parseLocationString(locationStr, electionType) {
         dzongkhag: parts[0] || "",
         gewog: parts[1] || "",
       };
-    case ELECTION_TYPES.TSHOGPA:
+    case ELECTION_TYPES.C_TSHOGPA:
       return {
         dzongkhag: parts[0] || "",
         gewog: parts[1] || "",
-        chewog: parts[2] || "",
+        chiwog: parts[2] || "",
       };
-    case ELECTION_TYPES.THROMPON:
-    case ELECTION_TYPES.THROMPON_TSHOGPA:
+    case ELECTION_TYPES.THROMPOEN:
       return {
         throm: parts[0] || "",
+      };
+    case ELECTION_TYPES.T_TSHOGPA:
+      return {
+        dzongkhag: parts[0] || "",
+        thromde: parts[1] || "",
       };
     default:
       return { location: locationStr };
@@ -155,17 +168,19 @@ export function parseLocationString(locationStr, electionType) {
  */
 export function detectElectionType(location) {
   if (location.demkhong) {
-    return ELECTION_TYPES.NATIONAL_ASSEMBLY;
+    return ELECTION_TYPES.NA;
   } else if (location.throm) {
-    return ELECTION_TYPES.THROMPON;
-  } else if (location.chewog) {
-    return ELECTION_TYPES.TSHOGPA;
+    return ELECTION_TYPES.THROMPOEN;
+  } else if (location.thromde) {
+    return ELECTION_TYPES.T_TSHOGPA;
+  } else if (location.chiwog) {
+    return ELECTION_TYPES.C_TSHOGPA;
   } else if (location.gewog) {
     // Could be GUP or MANGMI, default to GUP
     return ELECTION_TYPES.GUP;
   } else if (location.dzongkhag && Object.keys(location).length === 1) {
     // Only dzongkhag = National Council
-    return ELECTION_TYPES.NATIONAL_COUNCIL;
+    return ELECTION_TYPES.NC;
   }
   return null;
 }
@@ -185,24 +200,25 @@ export function validateLocation(location, electionType) {
 }
 
 /**
- * Get location label for display (e.g., "Demkhong", "Gewog", "Chewog")
+ * Get location label for display (e.g., "Demkhong", "Gewog", "Chiwog")
  */
 export function getLocationLabel(electionType) {
   const normalized = normalizeElectionType(electionType);
 
   switch (normalized) {
-    case ELECTION_TYPES.NATIONAL_ASSEMBLY:
+    case ELECTION_TYPES.NA:
       return "Demkhong";
-    case ELECTION_TYPES.NATIONAL_COUNCIL:
+    case ELECTION_TYPES.NC:
       return "Dzongkhag";
     case ELECTION_TYPES.GUP:
     case ELECTION_TYPES.MANGMI:
       return "Gewog";
-    case ELECTION_TYPES.TSHOGPA:
-      return "Chewog";
-    case ELECTION_TYPES.THROMPON:
-    case ELECTION_TYPES.THROMPON_TSHOGPA:
+    case ELECTION_TYPES.C_TSHOGPA:
+      return "Chiwog";
+    case ELECTION_TYPES.THROMPOEN:
       return "Throm";
+    case ELECTION_TYPES.T_TSHOGPA:
+      return "Thromde";
     default:
       return "Location";
   }

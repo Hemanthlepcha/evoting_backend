@@ -115,6 +115,54 @@
           "type": "string"
         }
       ],
+      "name": "getAllPollingStations",
+      "outputs": [
+        {
+          "internalType": "string[]",
+          "name": "",
+          "type": "string[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "electionId",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "candidate",
+          "type": "string"
+        }
+      ],
+      "name": "getCandidatePollingStationVotes",
+      "outputs": [
+        {
+          "internalType": "string[]",
+          "name": "pollingStations",
+          "type": "string[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "votesPerStation",
+          "type": "uint256[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "electionId",
+          "type": "string"
+        }
+      ],
       "name": "getCandidateVotesAndTotalElectionVotes",
       "outputs": [
         {
@@ -336,6 +384,11 @@
         {
           "internalType": "string",
           "name": "genderStr",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "pollingStation",
           "type": "string"
         }
       ],
