@@ -58,7 +58,7 @@ router.post("/register", async (req, res) => {
       const validation = validateLocation(location, detectedElectionType);
       if (!validation.isValid) {
         return res.status(400).json({
-          error: `Missing required location fields for ${detectedElectionType}`,
+          error: `Required Location details are missing for candidate registration`,
           missingFields: validation.missingFields,
           requiredFields: validation.requiredFields,
         });
