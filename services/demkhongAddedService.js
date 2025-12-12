@@ -333,9 +333,42 @@ router.get("/votesByElection", async (req, res) => {
     }
 
     // Detect election type from first candidate's location if not provided
+    let detectedElectionType = null;
     if (!electionType && locationStrings.length > 0) {
-      const firstLocation = parseLocationString(locationStrings[0], null);
-      electionType = detectElectionType(firstLocation);
+      const firstLocationStr = locationStrings[0];
+      const parts = firstLocationStr.split("/");
+
+      // Detect based on structure: count parts and check patterns
+      if (parts.length === 1) {
+        detectedElectionType = ELECTION_TYPES.NC; // Only dzongkhag
+      } else if (parts.length === 2) {
+        // Could be NA (dzongkhag/demkhong), GUP/MANGMI (dzongkhag/gewog),
+        // THROMPOEN (dzongkhag/thromde), or T_TSHOGPA (dzongkhag/thromde)
+        // We can't distinguish between these without more context
+        detectedElectionType = null; // User must provide electionType
+      } else if (parts.length === 3) {
+        detectedElectionType = ELECTION_TYPES.C_TSHOGPA; // dzongkhag/gewog/chiwog
+      }
+
+      if (detectedElectionType) {
+        electionType = detectedElectionType;
+      }
+    }
+
+    // If electionType is provided, validate that candidates match this structure
+    if (electionType && locationStrings.length > 0) {
+      const expectedPartCount = getRequiredLocationFields(electionType).length;
+      const firstCandidatePartCount = locationStrings[0].split("/").length;
+
+      if (expectedPartCount !== firstCandidatePartCount) {
+        return res.status(400).json({
+          error: `Election type mismatch`,
+          message: `The electionId '${electionId}' contains candidates with ${firstCandidatePartCount}-part locations, but election type '${electionType}' expects ${expectedPartCount}-part locations`,
+          hint: `This election appears to be for a different election type. Please verify the electionId and electionType.`,
+          expectedStructure: getRequiredLocationFields(electionType).join("/"),
+          actualStructure: locationStrings[0],
+        });
+      }
     }
 
     // Build filter location string based on provided query params
