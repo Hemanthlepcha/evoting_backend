@@ -13,6 +13,7 @@ import {
   validateLocation,
   getLocationLabel,
   normalizeElectionType,
+  getRequiredLocationFields,
 } from "../utils/electionTypes.js";
 
 const abiData = JSON.parse(fs.readFileSync("./abi/demkhongAbi.json", "utf-8"));
@@ -267,7 +268,6 @@ router.get("/votesByElection", async (req, res) => {
     gewog,
     chiwog,
     demkhong,
-    throm,
     thromde,
   } = req.query;
 
@@ -283,6 +283,33 @@ router.get("/votesByElection", async (req, res) => {
     // Normalize election type if provided
     if (electionType) {
       electionType = normalizeElectionType(electionType);
+
+      // Validate that provided location fields match the election type
+      const providedFields = [];
+      if (dzongkhag) providedFields.push("dzongkhag");
+      if (gewog) providedFields.push("gewog");
+      if (chiwog) providedFields.push("chiwog");
+      if (demkhong) providedFields.push("demkhong");
+      if (thromde) providedFields.push("thromde");
+
+      if (providedFields.length > 0) {
+        // Check if provided fields are valid for this election type
+        const requiredFields = getRequiredLocationFields(electionType);
+        const invalidFields = providedFields.filter(
+          (field) => !requiredFields.includes(field)
+        );
+
+        if (invalidFields.length > 0) {
+          return res.status(400).json({
+            error: `Invalid location fields for election type ${electionType}`,
+            invalidFields,
+            validFields: requiredFields,
+            hint: `For ${electionType} elections, use: ${requiredFields.join(
+              ", "
+            )}`,
+          });
+        }
+      }
     }
 
     const [
@@ -293,6 +320,23 @@ router.get("/votesByElection", async (req, res) => {
       totalMale,
       totalFemale,
     ] = await contract.getCandidateVotesAndTotalElectionVotes(electionId);
+
+    // If no candidates found
+    if (candidates.length === 0) {
+      return res.json({
+        results: [],
+        totalVotes: "0",
+        totalMale: "0",
+        totalFemale: "0",
+        message: `No candidates found for election: ${electionId}`,
+      });
+    }
+
+    // Detect election type from first candidate's location if not provided
+    if (!electionType && locationStrings.length > 0) {
+      const firstLocation = parseLocationString(locationStrings[0], null);
+      electionType = detectElectionType(firstLocation);
+    }
 
     // Build filter location string based on provided query params
     let filterLocationString = null;
@@ -363,6 +407,21 @@ router.get("/votesByElection", async (req, res) => {
       logger.info(
         `Filtered results for election: ${electionId}, location: ${filterLocationString}, found: ${results.length} candidates`
       );
+
+      // If no results match the filter, return specific message
+      if (results.length === 0) {
+        return res.status(404).json({
+          results: [],
+          totalVotes: "0",
+          totalMale: "0",
+          totalFemale: "0",
+          message: `No candidates found for election type ${electionType} with the specified location filter`,
+          electionId,
+          electionType,
+          filteredBy: filterLocationString,
+          hint: "Check if the election type and location filters match the registered candidates",
+        });
+      }
     }
 
     // Recalculate totals based on filtered results
@@ -383,6 +442,7 @@ router.get("/votesByElection", async (req, res) => {
         : totalVotes.toString(),
       totalMale: totalMale.toString(),
       totalFemale: totalFemale.toString(),
+      electionType: electionType || "unknown",
       filteredBy: filterLocationString || null,
     });
   } catch (err) {
