@@ -301,10 +301,12 @@ router.get("/votesByElection", async (req, res) => {
 
         if (invalidFields.length > 0) {
           return res.status(400).json({
-            error: `Invalid location fields for election type ${electionType}`,
-            invalidFields,
-            validFields: requiredFields,
-            hint: `For ${electionType} elections, use: ${requiredFields.join(
+            error:
+              "The location filter you provided doesn't match this election type",
+            message: `You're searching for a ${electionType} election, but the location fields you provided are not valid for this type`,
+            providedFields: invalidFields,
+            requiredFields: requiredFields,
+            hint: `Please use only these location fields: ${requiredFields.join(
               ", "
             )}`,
           });
@@ -362,11 +364,9 @@ router.get("/votesByElection", async (req, res) => {
 
       if (expectedPartCount !== firstCandidatePartCount) {
         return res.status(400).json({
-          error: `Election type mismatch`,
-          message: `The electionId '${electionId}' contains candidates with ${firstCandidatePartCount}-part locations, but election type '${electionType}' expects ${expectedPartCount}-part locations`,
-          hint: `This election appears to be for a different election type. Please verify the electionId and electionType.`,
-          expectedStructure: getRequiredLocationFields(electionType).join("/"),
-          actualStructure: locationStrings[0],
+          error: "Election type does not match",
+          message: `The election '${electionId}' is not a ${electionType} election. Please check your election ID or election type.`,
+          hint: "Make sure you're using the correct election ID for the type of election you want to view",
         });
       }
     }
@@ -448,33 +448,61 @@ router.get("/votesByElection", async (req, res) => {
           totalVotes: "0",
           totalMale: "0",
           totalFemale: "0",
-          message: `No candidates found for election type ${electionType} with the specified location filter`,
-          electionId,
-          electionType,
-          filteredBy: filterLocationString,
-          hint: "Check if the election type and location filters match the registered candidates",
+          message: "No results found for the location you specified",
+          hint: "There are no candidates registered for this location. Please check if you entered the correct location details.",
+          searchedLocation: filterLocationString,
         });
       }
     }
 
     // Recalculate totals based on filtered results
     let filteredTotalVotes = 0;
+    let filteredTotalMale = 0;
+    let filteredTotalFemale = 0;
+
     if (filterLocationString && results.length > 0) {
-      results.forEach((result) => {
-        filteredTotalVotes += parseInt(result.totalVotes);
-      });
+      // For filtered results, we need to get gender breakdown from the smart contract
+      // by calling getDemkhongResults which provides location-specific gender data
+      try {
+        const [
+          locationStringsGender,
+          totalVotesByLocation,
+          maleByLocation,
+          femaleByLocation,
+        ] = await contract.getDemkhongResults(electionId);
+
+        // Find matching locations and sum up gender votes
+        locationStringsGender.forEach((locStr, index) => {
+          if (locStr.startsWith(filterLocationString)) {
+            filteredTotalVotes += parseInt(
+              totalVotesByLocation[index].toString()
+            );
+            filteredTotalMale += parseInt(maleByLocation[index].toString());
+            filteredTotalFemale += parseInt(femaleByLocation[index].toString());
+          }
+        });
+      } catch (err) {
+        logger.error(
+          `Error fetching gender breakdown for filtered location: ${err.message}`
+        );
+        // Fallback: just calculate total votes from results
+        results.forEach((result) => {
+          filteredTotalVotes += parseInt(result.totalVotes);
+        });
+      }
     } else {
       filteredTotalVotes = totalVotes;
+      filteredTotalMale = totalMale;
+      filteredTotalFemale = totalFemale;
     }
 
     logger.info(`Admin fetched results for election: ${electionId}`);
+
     res.json({
       results,
-      totalVotes: filterLocationString
-        ? filteredTotalVotes.toString()
-        : totalVotes.toString(),
-      totalMale: totalMale.toString(),
-      totalFemale: totalFemale.toString(),
+      totalVotes: filteredTotalVotes.toString(),
+      totalMale: filteredTotalMale.toString(),
+      totalFemale: filteredTotalFemale.toString(),
       electionType: electionType || "unknown",
       filteredBy: filterLocationString || null,
     });
