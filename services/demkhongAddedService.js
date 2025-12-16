@@ -104,16 +104,29 @@ router.post("/register", async (req, res) => {
   } catch (err) {
     if (err.message.includes("Candidate already registered")) {
       logger.warn(`Candidate already registered: ${candidate}`);
-      return res.status(409).json({ message: "Candidate Already Registered" });
+      return res.status(409).json({
+        error: "Candidate already registered",
+        details: `The candidate '${candidate}' is already registered for this election`,
+      });
     }
     if (err.message.includes("Not the owner")) {
       logger.warn(`Unauthorized candidate registration attempt: ${candidate}`);
       return res.status(403).json({
-        message: "Unauthorized: Only contract owner can register candidates",
+        error: "Unauthorized",
+        details: "Only contract owner can register candidates",
+      });
+    }
+    if (err.message.includes("Election does not exist")) {
+      return res.status(404).json({
+        error: "Election not found",
+        details: `Election with ID '${electionId}' does not exist`,
       });
     }
     logger.error(`Error registering candidate: ${err.message}`);
-    res.status(400).json({ error: err.message });
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to register candidate. Please try again later.",
+    });
   }
 });
 
@@ -135,19 +148,29 @@ router.delete("/remove", async (req, res) => {
   } catch (err) {
     if (err.message.includes("Candidate not registered")) {
       logger.warn(`Candidate not found: ${candidate}`);
-      return res.status(404).json({ error: "Candidate not registered" });
+      return res.status(404).json({
+        error: "Candidate not found",
+        details: `Candidate '${candidate}' is not registered for this election`,
+      });
     }
     if (err.message.includes("Not the owner")) {
       logger.warn(`Unauthorized candidate removal attempt: ${candidate}`);
       return res.status(403).json({
-        message: "Unauthorized: Only contract owner can remove candidates",
+        error: "Unauthorized",
+        details: "Only contract owner can remove candidates",
       });
     }
     if (err.message.includes("Election does not exist")) {
-      return res.status(404).json({ error: "Election does not exist" });
+      return res.status(404).json({
+        error: "Election not found",
+        details: `Election with ID '${electionId}' does not exist`,
+      });
     }
     logger.error(`Error removing candidate: ${err.message}`);
-    res.status(400).json({ error: err.message });
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to remove candidate. Please try again later.",
+    });
   }
 });
 
@@ -188,25 +211,35 @@ router.post("/vote", async (req, res) => {
   } catch (err) {
     logger.error(`Error casting vote: ${err.message}`);
     if (err.message.includes("Already voted in this election")) {
-      res
-        .status(409)
-        .send({ error: "You have already voted in this election." });
+      return res.status(409).json({
+        error: "Already voted",
+        details: "You have already cast your vote in this election",
+      });
     } else if (err.message.includes("Candidate not registered")) {
-      res
-        .status(404)
-        .send({ error: "Candidate is not registered for this election." });
+      return res.status(404).json({
+        error: "Candidate not found",
+        details: `Candidate '${candidate}' is not registered for this election`,
+      });
     } else if (err.message.includes("Invalid gender string")) {
-      res
-        .status(400)
-        .send({ error: "Invalid gender. Use 'Male' or 'Female'." });
+      return res.status(400).json({
+        error: "Invalid gender",
+        details: "Gender must be 'Male' or 'Female'",
+      });
     } else if (err.message.includes("Election does not exist")) {
-      res.status(404).send({ error: "Election does not exist." });
+      return res.status(404).json({
+        error: "Election not found",
+        details: `Election with ID '${electionId}' does not exist`,
+      });
     } else if (err.message.includes("Not the owner")) {
-      res
-        .status(403)
-        .send({ error: "Unauthorized: Only contract owner can cast votes" });
+      return res.status(403).json({
+        error: "Unauthorized",
+        details: "Only contract owner can cast votes",
+      });
     } else {
-      res.status(400).send({ error: err.message });
+      return res.status(500).json({
+        error: "Internal server error",
+        details: "Failed to cast vote. Please try again later.",
+      });
     }
   }
 });
@@ -228,16 +261,23 @@ router.post("/end", async (req, res) => {
     res.json({ message: "Election ended", txHash: tx.hash });
   } catch (err) {
     if (err.message.includes("Election does not exist")) {
-      return res.status(404).json({ error: "Election does not exist" });
+      return res.status(404).json({
+        error: "Election not found",
+        details: `Election with ID '${electionId}' does not exist`,
+      });
     }
     if (err.message.includes("Not the owner")) {
       logger.warn(`Unauthorized election end attempt: ${electionId}`);
       return res.status(403).json({
-        message: "Unauthorized: Only contract owner can end elections",
+        error: "Unauthorized",
+        details: "Only contract owner can end elections",
       });
     }
     logger.error(`Error ending election: ${err.message}`);
-    res.status(400).json({ error: err.message });
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to end election. Please try again later.",
+    });
   }
 });
 
@@ -251,11 +291,15 @@ router.get("/elections", async (req, res) => {
     if (err.message.includes("Not the owner")) {
       logger.warn(`Unauthorized elections fetch attempt`);
       return res.status(403).json({
-        message: "Unauthorized: Only contract owner can view elections",
+        error: "Unauthorized",
+        details: "Only contract owner can view elections",
       });
     }
     logger.error(`Error fetching elections: ${err.message}`);
-    res.status(400).json({ error: err.message });
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to fetch elections. Please try again later.",
+    });
   }
 });
 
@@ -325,12 +369,13 @@ router.get("/votesByElection", async (req, res) => {
 
     // If no candidates found
     if (candidates.length === 0) {
-      return res.json({
+      return res.status(404).json({
+        error: "No candidates found",
+        details: `No candidates are registered for election '${electionId}'`,
         results: [],
         totalVotes: "0",
         totalMale: "0",
         totalFemale: "0",
-        message: `No candidates found for election: ${electionId}`,
       });
     }
 
@@ -444,11 +489,11 @@ router.get("/votesByElection", async (req, res) => {
       // If no results match the filter, return specific message
       if (results.length === 0) {
         return res.status(404).json({
+          error: "No results found for given location",
           results: [],
           totalVotes: "0",
           totalMale: "0",
           totalFemale: "0",
-          message: "No results found for the location you specified",
           hint: "There are no candidates registered for this location. Please check if you entered the correct location details.",
           searchedLocation: filterLocationString,
         });
@@ -510,22 +555,23 @@ router.get("/votesByElection", async (req, res) => {
     if (err.message.includes("Election ID does not exist")) {
       logger.warn(`Election not found: ${electionId}`);
       return res.status(404).json({
-        error: "Election ID does not exist",
+        error: "Election not found",
+        details: `Election with ID '${electionId}' does not exist`,
         electionId,
-        results: [],
       });
     }
     if (err.message.includes("Not the owner")) {
       logger.warn(`Unauthorized results fetch attempt: ${electionId}`);
       return res.status(403).json({
-        message: "Unauthorized: Only contract owner can view detailed results",
+        error: "Unauthorized",
+        details: "Only contract owner can view detailed results",
       });
     }
     logger.error(`Error fetching all vote counts: ${err.message}`);
-    res.status(400).json({
-      error: "Error fetching election results",
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to fetch election results. Please try again later.",
       electionId,
-      results: [],
     });
   }
 });
@@ -587,9 +633,9 @@ router.get("/geographicalResults", async (req, res) => {
   } catch (err) {
     if (err.message.includes("Election does not exist")) {
       return res.status(404).json({
-        error: "Election ID does not exist",
+        error: "Election not found",
+        details: `Election with ID '${electionId}' does not exist`,
         electionId,
-        results: [],
       });
     }
     if (err.message.includes("Not the owner")) {
@@ -597,15 +643,15 @@ router.get("/geographicalResults", async (req, res) => {
         `Unauthorized geographical results fetch attempt: ${electionId}`
       );
       return res.status(403).json({
-        message:
-          "Unauthorized: Only contract owner can view geographical results",
+        error: "Unauthorized",
+        details: "Only contract owner can view geographical results",
       });
     }
     logger.error(`Error fetching geographical results: ${err.message}`);
-    res.status(400).json({
-      error: "Error fetching geographical results",
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to fetch geographical results. Please try again later.",
       electionId,
-      results: [],
     });
   }
 });
@@ -664,9 +710,9 @@ async function geographicalResultsHandler(req, res) {
   } catch (err) {
     if (err.message.includes("Election does not exist")) {
       return res.status(404).json({
-        error: "Election ID does not exist",
+        error: "Election not found",
+        details: `Election with ID '${electionId}' does not exist`,
         electionId,
-        results: [],
       });
     }
     if (err.message.includes("Not the owner")) {
@@ -674,15 +720,15 @@ async function geographicalResultsHandler(req, res) {
         `Unauthorized geographical results fetch attempt: ${electionId}`
       );
       return res.status(403).json({
-        message:
-          "Unauthorized: Only contract owner can view geographical results",
+        error: "Unauthorized",
+        details: "Only contract owner can view geographical results",
       });
     }
     logger.error(`Error fetching geographical results: ${err.message}`);
-    res.status(400).json({
-      error: "Error fetching geographical results",
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to fetch geographical results. Please try again later.",
       electionId,
-      results: [],
     });
   }
 }
@@ -757,10 +803,16 @@ router.get("/public-result/:electionId", async (req, res) => {
     });
   } catch (err) {
     if (err.message.includes("Election ID does not exist")) {
-      return res.status(404).json({ error: "Election does not exist" });
+      return res.status(404).json({
+        error: "Election not found",
+        details: `Election with ID '${electionId}' does not exist`,
+      });
     }
     logger.error(`Error fetching public results: ${err.message}`);
-    res.status(400).json({ error: "Error fetching election results" });
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to fetch election results. Please try again later.",
+    });
   }
 });
 
@@ -780,12 +832,22 @@ router.get("/checkVoted", async (req, res) => {
   } catch (err) {
     if (err.message.includes("Not the owner")) {
       logger.warn(`Unauthorized vote check attempt: ${electionId}, ${uid}`);
-      return res.status(403).send({
-        error: "Unauthorized: Only contract owner can check vote status",
+      return res.status(403).json({
+        error: "Unauthorized",
+        details: "Only contract owner can check vote status",
+      });
+    }
+    if (err.message.includes("Election does not exist")) {
+      return res.status(404).json({
+        error: "Election not found",
+        details: `Election with ID '${electionId}' does not exist`,
       });
     }
     logger.error(`Error checking vote status: ${err.message}`);
-    res.status(400).send({ error: "Error checking vote status" });
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to check vote status. Please try again later.",
+    });
   }
 });
 
