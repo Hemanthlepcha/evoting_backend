@@ -139,6 +139,35 @@
           "type": "string"
         }
       ],
+      "name": "getCandidateGenderVotes",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "maleVotes",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "femaleVotes",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "electionId",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "candidate",
+          "type": "string"
+        }
+      ],
       "name": "getCandidatePollingStationVotes",
       "outputs": [
         {

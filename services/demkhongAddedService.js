@@ -463,12 +463,20 @@ router.get("/votesByElection", async (req, res) => {
           votesByPollingStation[ps] = votesPerStation[idx].toString();
         });
 
+        // Get gender breakdown for this candidate
+        const [maleVotes, femaleVotes] = await contract.getCandidateGenderVotes(
+          electionId,
+          candidate
+        );
+
         return {
           candidate,
           location: locationStr,
           locationDetails,
           votes: votesByPollingStation,
           totalVotes: candidateVotes[index].toString(),
+          totalMale: maleVotes.toString(),
+          totalFemale: femaleVotes.toString(),
         };
       })
     );
@@ -783,6 +791,12 @@ router.get("/public-result/:electionId", async (req, res) => {
           votesByPollingStation[ps] = votesPerStation[idx].toString();
         });
 
+        // Get gender breakdown for this candidate
+        const [maleVotes, femaleVotes] = await contract.getCandidateGenderVotes(
+          electionId,
+          candidate
+        );
+
         return {
           candidate,
           location: locationStr,
@@ -790,6 +804,8 @@ router.get("/public-result/:electionId", async (req, res) => {
           demkhong: locationStr, // backward compatibility
           votes: votesByPollingStation,
           totalVotes: candidateVotes[index].toString(),
+          totalMale: maleVotes.toString(),
+          totalFemale: femaleVotes.toString(),
         };
       })
     );
