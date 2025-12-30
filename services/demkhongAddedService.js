@@ -473,7 +473,7 @@ router.get("/votesByElection", async (req, res) => {
           candidate,
           location: locationStr,
           locationDetails,
-          votes: votesByPollingStation,
+          ps_votes: votesByPollingStation,
           totalVotes: candidateVotes[index].toString(),
           totalMale: maleVotes.toString(),
           totalFemale: femaleVotes.toString(),
@@ -549,10 +549,29 @@ router.get("/votesByElection", async (req, res) => {
       filteredTotalFemale = totalFemale;
     }
 
+    // Fetch polling station gender breakdown
+    let pollingStationBreakdown = {};
+    try {
+      const [pollingStations, maleVotesPS, femaleVotesPS, totalVotesPS] =
+        await contract.getPollingStationGenderBreakdown(electionId);
+
+      pollingStations.forEach((ps, index) => {
+        pollingStationBreakdown[ps] = {
+          maleVote: parseInt(maleVotesPS[index].toString()),
+          femaleVote: parseInt(femaleVotesPS[index].toString()),
+          totalVote: parseInt(totalVotesPS[index].toString()),
+        };
+      });
+    } catch (err) {
+      logger.error(`Error fetching polling station breakdown: ${err.message}`);
+      // Continue without polling station breakdown if it fails
+    }
+
     logger.info(`Admin fetched results for election: ${electionId}`);
 
     res.json({
       results,
+      ps: pollingStationBreakdown,
       totalVotes: filteredTotalVotes.toString(),
       totalMale: filteredTotalMale.toString(),
       totalFemale: filteredTotalFemale.toString(),
@@ -810,9 +829,28 @@ router.get("/public-result/:electionId", async (req, res) => {
       })
     );
 
+    // Fetch polling station gender breakdown
+    let pollingStationBreakdown = {};
+    try {
+      const [pollingStations, maleVotesPS, femaleVotesPS, totalVotesPS] =
+        await contract.getPollingStationGenderBreakdown(electionId);
+
+      pollingStations.forEach((ps, index) => {
+        pollingStationBreakdown[ps] = {
+          maleVote: parseInt(maleVotesPS[index].toString()),
+          femaleVote: parseInt(femaleVotesPS[index].toString()),
+          totalVote: parseInt(totalVotesPS[index].toString()),
+        };
+      });
+    } catch (err) {
+      logger.error(`Error fetching polling station breakdown: ${err.message}`);
+      // Continue without polling station breakdown if it fails
+    }
+
     logger.info(`Public results fetched for election: ${electionId}`);
     res.json({
       results,
+      ps: pollingStationBreakdown,
       totalVotes: totalVotes.toString(),
       totalMale: totalMale.toString(),
       totalFemale: totalFemale.toString(),
