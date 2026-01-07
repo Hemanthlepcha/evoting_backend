@@ -45,6 +45,23 @@ contract Voting {
         private locationGenderVoteCount;
     // electionId => location => gender => total
 
+    // Per-candidate gender tracking
+    mapping(string => mapping(string => mapping(Gender => uint256)))
+        private candidateGenderVotes;
+    // electionId => candidate => gender => total
+
+    // Polling station tracking
+    mapping(string => mapping(string => mapping(string => uint256)))
+        private candidatePollingStationVotes;
+    // electionId => candidate => pollingStation => votes
+    mapping(string => string[]) private pollingStationsPerElection; // electionId => polling station list
+    mapping(string => mapping(string => bool)) private isPollingStationTracked; // electionId => pollingStation => exists
+
+    // Polling station gender tracking
+    mapping(string => mapping(string => mapping(Gender => uint256)))
+        private pollingStationGenderVotes;
+    // electionId => pollingStation => gender => votes
+
     // =======================
     // Events
     // =======================
@@ -162,7 +179,8 @@ contract Voting {
         string memory electionId,
         string memory uid,
         string memory candidate,
-        string memory genderStr
+        string memory genderStr,
+        string memory pollingStation
     ) public onlyOwner {
         require(electionExists[electionId], "Election does not exist");
         require(
@@ -180,11 +198,28 @@ contract Voting {
         // Update aggregates
         genderVoteCount[electionId][gender] += 1;
 
+        // Track gender votes per candidate
+        candidateGenderVotes[electionId][candidate][gender] += 1;
+
         // Get candidate's location and aggregate votes
         string memory location = candidateDetails[electionId][candidate]
             .location;
         locationVotes[electionId][location] += 1;
         locationGenderVoteCount[electionId][location][gender] += 1;
+
+        // Track polling station votes for this candidate
+        candidatePollingStationVotes[electionId][candidate][
+            pollingStation
+        ] += 1;
+
+        // Track unique polling stations per election
+        if (!isPollingStationTracked[electionId][pollingStation]) {
+            isPollingStationTracked[electionId][pollingStation] = true;
+            pollingStationsPerElection[electionId].push(pollingStation);
+        }
+
+        // Track polling station gender votes
+        pollingStationGenderVotes[electionId][pollingStation][gender] += 1;
 
         emit VoteCast(electionId, uid);
     }
@@ -223,6 +258,91 @@ contract Voting {
 
         totalMale = genderVoteCount[electionId][Gender.Male];
         totalFemale = genderVoteCount[electionId][Gender.Female];
+    }
+
+    function getCandidatePollingStationVotes(
+        string memory electionId,
+        string memory candidate
+    )
+        public
+        view
+        onlyOwner
+        returns (
+            string[] memory pollingStations,
+            uint256[] memory votesPerStation
+        )
+    {
+        require(electionExists[electionId], "Election ID does not exist");
+        require(
+            isCandidateTracked[electionId][candidate],
+            "Candidate not registered"
+        );
+
+        pollingStations = pollingStationsPerElection[electionId];
+        votesPerStation = new uint256[](pollingStations.length);
+
+        for (uint i = 0; i < pollingStations.length; i++) {
+            votesPerStation[i] = candidatePollingStationVotes[electionId][
+                candidate
+            ][pollingStations[i]];
+        }
+    }
+
+    function getCandidateGenderVotes(
+        string memory electionId,
+        string memory candidate
+    ) public view onlyOwner returns (uint256 maleVotes, uint256 femaleVotes) {
+        require(electionExists[electionId], "Election ID does not exist");
+        require(
+            isCandidateTracked[electionId][candidate],
+            "Candidate not registered"
+        );
+
+        maleVotes = candidateGenderVotes[electionId][candidate][Gender.Male];
+        femaleVotes = candidateGenderVotes[electionId][candidate][
+            Gender.Female
+        ];
+    }
+
+    function getAllPollingStations(
+        string memory electionId
+    ) public view onlyOwner returns (string[] memory) {
+        require(electionExists[electionId], "Election ID does not exist");
+        return pollingStationsPerElection[electionId];
+    }
+
+    function getPollingStationGenderBreakdown(
+        string memory electionId
+    )
+        public
+        view
+        onlyOwner
+        returns (
+            string[] memory pollingStations,
+            uint256[] memory maleVotes,
+            uint256[] memory femaleVotes,
+            uint256[] memory totalVotes
+        )
+    {
+        require(electionExists[electionId], "Election ID does not exist");
+
+        pollingStations = pollingStationsPerElection[electionId];
+        uint256 len = pollingStations.length;
+
+        maleVotes = new uint256[](len);
+        femaleVotes = new uint256[](len);
+        totalVotes = new uint256[](len);
+
+        for (uint i = 0; i < len; i++) {
+            string memory ps = pollingStations[i];
+            maleVotes[i] = pollingStationGenderVotes[electionId][ps][
+                Gender.Male
+            ];
+            femaleVotes[i] = pollingStationGenderVotes[electionId][ps][
+                Gender.Female
+            ];
+            totalVotes[i] = maleVotes[i] + femaleVotes[i];
+        }
     }
 
     function getLocationResults(

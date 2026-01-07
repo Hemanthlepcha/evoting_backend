@@ -459,8 +459,14 @@ router.get("/votesByElection", async (req, res) => {
 
         // Convert to object format: { "PS1": "12", "PS2": "29" }
         const votesByPollingStation = {};
+
         pollingStations.forEach((ps, idx) => {
-          votesByPollingStation[ps] = votesPerStation[idx].toString();
+          const count = votesPerStation[idx];
+
+          if (count > 0n) {
+            // BigInt-safe check
+            votesByPollingStation[ps] = count.toString();
+          }
         });
 
         // Get gender breakdown for this candidate
