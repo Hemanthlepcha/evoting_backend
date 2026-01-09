@@ -5,9 +5,7 @@ import bodyParser from "body-parser";
 import swaggerUi from "swagger-ui-express";
 import YAML from "yamljs";
 import authRouter from "./services/auth.js";
-import apiRouter from "./services/contractService.js";
-import apiRouterNew from "./services/new_contract.js";
-import demkhongApiRouter from "./services/demkhongAddedService.js";
+import electionRouter from "./services/demkhongAddedService.js";
 
 import { logger } from "./utils/logger.js";
 import { networkInterfaces } from "os";
@@ -40,9 +38,7 @@ app.use(
   })
 );
 app.use("/auth", authRouter);
-app.use("/api-old", apiRouter);
-app.use("/api-v2", apiRouterNew);
-app.use("/api", demkhongApiRouter); // Production endpoint with multi-election support
+app.use("/api", electionRouter); // Production endpoint with multi-election support
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 app.get("/", (req, res) => {
