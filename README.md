@@ -2,12 +2,35 @@
 
 🎉 **Now supports multiple election types with flexible geographical hierarchies!**
 
-## 🗳️ Supported Election Types
+## � Features
 
-- **National Assembly** - Dzongkhag/Demkhong hierarchy
-- **Gup Elections** - Dzongkhag/Gewog hierarchy
-- **Mangmi Elections** - Dzongkhag/Gewog hierarchy
-- **Tshogpa Elections** - Dzongkhag/Gewog/Chewog hierarchy
+✨ **Modular Architecture**
+- Refactored into 4 organized route modules for better maintainability
+- Shared utilities prevent code duplication
+- Clean separation of concerns
+
+🎯 **Multi-Election Support**
+- National Assembly elections
+- Gup elections (district-level)
+- Mangmi elections
+- Tshogpa elections (village-level)
+- Flexible geographical hierarchies
+
+🔐 **Secure**
+- JWT-based authentication
+- Wallet-based transaction signing
+- Role-based access control
+
+📊 **Advanced Analytics**
+- Location-based result aggregation
+- Gender breakdown statistics
+- Polling station analysis
+- Hierarchical filtering support
+
+📝 **Well-Documented**
+- Interactive Swagger UI
+- Comprehensive README files
+- Architecture documentation
 
 ## 🚀 Quick Start
 
@@ -61,41 +84,50 @@ Server will be available at:
 
 ## 📚 Documentation
 
-- **[API Examples](./API_EXAMPLES.md)** - Complete API usage examples for all election types
-- **[Implementation Guide](./IMPLEMENTATION_GUIDE.md)** - Technical architecture and data flow
-- **[Swagger UI](http://localhost:3001/api-docs)** - Interactive API documentation
+- **[Refactoring Summary](./REFACTORING_SUMMARY.md)** - Architecture overview and module descriptions
+- **[Swagger UI](http://localhost:3001/api-docs)** - Interactive API documentation (when server is running)
 
 ## 🧪 Testing
 
-Run the comprehensive test suite:
+Test the application:
 
 ```bash
-node test_election_types.js
+npm start
+# Server will be running at http://localhost:3001
+# Access Swagger UI at http://localhost:3001/api-docs
 ```
-
-This will test:
-
-- Candidate registration for all election types
-- Vote casting
-- Results retrieval
-- Geographical aggregation
-- Backward compatibility
 
 ## 📋 API Endpoints
 
-### Main Production Endpoint: `/api/*`
+All endpoints are under `/api/*` and organized by functionality:
 
-| Endpoint                   | Method | Description                                      |
-| -------------------------- | ------ | ------------------------------------------------ |
-| `/api/register`            | POST   | Register candidate (supports all election types) |
-| `/api/vote`                | POST   | Cast a vote                                      |
-| `/api/votesByElection`     | GET    | Get candidate results                            |
-| `/api/geographicalResults` | GET    | Get votes by location                            |
-| `/api/demkhongResults`     | GET    | Legacy endpoint (still works)                    |
-| `/api/elections`           | GET    | List all elections                               |
-| `/api/end`                 | POST   | End an election                                  |
-| `/api/checkVoted`          | GET    | Check if user voted                              |
-| `/api/public-result/:id`   | GET    | Public results (after election ends)             |
+### Candidate Management
+| Endpoint          | Method | Auth | Description                          |
+|-------------------|--------|------|--------------------------------------|
+| `/api/register`   | POST   | ✅   | Register candidate                   |
+| `/api/remove`     | DELETE | ✅   | Remove candidate                     |
+
+### Voting Operations
+| Endpoint          | Method | Auth | Description                          |
+|-------------------|--------|------|--------------------------------------|
+| `/api/vote`       | POST   | ✅   | Cast a vote                          |
+| `/api/checkVoted` | GET    | ✅   | Check if user has voted              |
+
+### Election Management
+| Endpoint        | Method | Auth | Description              |
+|-----------------|--------|------|--------------------------|
+| `/api/end`      | POST   | ✅   | End an election          |
+| `/api/elections`| GET    | ✅   | List all elections       |
+
+### Results & Analytics
+| Endpoint                   | Method | Auth | Description                                    |
+|----------------------------|--------|------|------------------------------------------------|
+| `/api/votesByElection`     | GET    | ✅   | Get detailed results with location filtering   |
+| `/api/geographicalResults` | GET    | ✅   | Get votes aggregated by location               |
+| `/api/demkhongResults`     | GET    | ✅   | Legacy endpoint (for backward compatibility)   |
+| `/api/public-result/:id`   | GET    | ❌   | Public results (no authentication needed)      |
+
+**Auth Column**: ✅ = Authentication required, ❌ = Public access
 
 ## 🔐 Authentication
 
@@ -170,23 +202,29 @@ See [API_EXAMPLES.md](./API_EXAMPLES.md) for complete examples.
 ## 🏗️ Project Structure
 
 ```
-Backend-for-Evoting-Smart-Contract/
+evoting_backend/
 ├── services/
-│   ├── auth.js                    # Authentication service
-│   ├── demkhongAddedService.js    # Main API (multi-election support)
-│   ├── contractService.js         # Legacy API
-│   └── new_contract.js            # Alternative API
+│   ├── index.js                      # Routes aggregator
+│   ├── utils.js                      # Shared utilities (contract setup)
+│   ├── routes/
+│   │   ├── candidate.routes.js       # Candidate registration & removal
+│   │   ├── vote.routes.js            # Voting operations
+│   │   ├── election.routes.js        # Election management
+│   │   └── results.routes.js         # Results retrieval & analytics
+│   └── auth.js                       # Authentication & JWT tokens
+├── auth/
+│   └── auth.js                       # Auth middleware
 ├── utils/
-│   ├── electionTypes.js           # Election type definitions & helpers
-│   ├── logger.js                  # Logging utility
-│   └── swagger-new.yaml           # API documentation
+│   ├── electionTypes.js              # Election type definitions & helpers
+│   ├── logger.js                     # Winston logging utility
+│   └── swagger-new.yaml              # API documentation
 ├── abi/
-│   └── demkhongAbi.json           # Smart contract ABI
-├── app.js                         # Main application entry point
-├── API_EXAMPLES.md                # Comprehensive API examples
-├── IMPLEMENTATION_GUIDE.md        # Technical documentation
-├── test_election_types.js         # Test suite
-└── README.md                      # This file
+│   └── demkhongAbi.json              # Smart contract ABI
+├── logs/                             # Application logs (auto-created)
+├── app.js                            # Main application entry point
+├── package.json                      # Dependencies
+├── README.md                         # This file
+└── REFACTORING_SUMMARY.md            # Architecture documentation
 ```
 
 ## 🛠️ Technology Stack
@@ -213,23 +251,81 @@ The backend can be deployed to any Node.js hosting platform:
 - Check `.env` file has all required variables
 - Verify RPC URL is accessible
 - Ensure port 3001 is not in use
+- Check for syntax errors: `node --check app.js`
+
+### Module import errors
+
+- Verify all route files exist in `/services/routes/`
+- Check relative import paths in route files
+- Ensure `/services/index.js` is properly aggregating all routes
 
 ### Transactions failing
 
 - Check wallet has sufficient MATIC for gas
 - Verify contract address is correct
 - Ensure you're using the contract owner's private key
+- Check transaction status on [Polygon Amoy Scan](https://amoy.polygonscan.com)
 
 ### Results not showing
 
 - Wait a few seconds after registration/voting for blockchain confirmation
-- Check transaction on [Polygon Scan](https://amoy.polygonscan.com)
 - Verify electionId matches exactly (case-sensitive)
+- Check that candidates are registered before voting
+
+## 🏗️ Architecture Overview
+
+### Modular Service Design
+
+The application uses a **route-based modular architecture** for better maintainability:
+
+```
+services/
+├── index.js                   # Aggregates all routes
+├── utils.js                   # Shared contract & utilities
+└── routes/
+    ├── candidate.routes.js    # Register/Remove endpoints
+    ├── vote.routes.js         # Voting endpoints
+    ├── election.routes.js     # Election management endpoints
+    └── results.routes.js      # Results & analytics endpoints
+```
+
+**Benefits**:
+- ✅ Clear separation of concerns
+- ✅ Easy to locate specific functionality
+- ✅ Reduced file size (max 400 lines per file)
+- ✅ No code duplication
+- ✅ Easier testing and debugging
+
+### Authentication Flow
+
+1. Client requests JWT token from `/auth/token` endpoint
+2. Server validates credentials and issues access + refresh tokens
+3. Client includes token in `Authorization: Bearer <token>` header
+4. Middleware validates token on each request
+5. Token can be refreshed using `/auth/refresh` endpoint
+
+### Data Flow
+
+```
+Client Request
+    ↓
+Route Handler (candidate.routes.js, vote.routes.js, etc.)
+    ↓
+Business Logic (validation, blockchain calls)
+    ↓
+Shared Utils (contract instance, hashUid, logger)
+    ↓
+Smart Contract (via ethers.js)
+    ↓
+Polygon Amoy Testnet
+    ↓
+Response to Client
+```
 
 ## 📞 Support
 
 For detailed information:
 
-- See [API_EXAMPLES.md](./API_EXAMPLES.md) for usage examples
-- See [IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md) for technical details
-- Check Swagger UI at `http://localhost:3001/api-docs`
+- See [REFACTORING_SUMMARY.md](./REFACTORING_SUMMARY.md) for complete architecture documentation
+- Check Swagger UI at `http://localhost:3001/api-docs` (when server is running)
+- Review individual route files in `/services/routes/` for endpoint details
