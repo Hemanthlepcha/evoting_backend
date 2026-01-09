@@ -1,310 +1,24 @@
-import { JsonRpcProvider, Wallet, Contract } from "ethers";
-import "dotenv/config";
-import crypto from "crypto";
 import { Router } from "express";
-import { authMiddleware } from "./auth.js";
-import fs from "fs";
-import { logger } from "../utils/logger.js";
 import {
   ELECTION_TYPES,
-  buildLocationString,
   parseLocationString,
-  detectElectionType,
-  validateLocation,
   getLocationLabel,
   normalizeElectionType,
+  buildLocationString,
   getRequiredLocationFields,
-} from "../utils/electionTypes.js";
+} from "../../utils/electionTypes.js";
+import { contract, logger } from "../utils.js";
+import { authMiddleware } from "../../auth/auth.js";
 
-const abiData = JSON.parse(fs.readFileSync("./abi/demkhongAbi.json", "utf-8"));
-const abi = abiData.abi; // Extract the abi array from the object
 const router = Router();
-router.use(authMiddleware);
 
-const provider = new JsonRpcProvider(process.env.AMOY_RPC_URL);
-const wallet = new Wallet(process.env.PRIVATE_KEY, provider);
-const contractAddress = process.env.CONTRACT_ADDRESS;
-
-const contract = new Contract(contractAddress, abi, wallet);
-
-function hashUid(uid) {
-  const secretUid = process.env.SECRET_PHRASE + uid;
-  return crypto.createHash("sha256").update(secretUid).digest("hex");
-}
-
-// Register a candidate
-router.post("/register", async (req, res) => {
-  const { electionId, candidate, location, electionType } = req.body;
-
-  // Support both old format (demkhong) and new format (location object)
-  let locationString;
-  let detectedElectionType;
-
-  try {
-    if (location) {
-      // New format: location object with dzongkhag, gewog, chiwog, demkhong, or thromde
-      detectedElectionType = electionType
-        ? normalizeElectionType(electionType)
-        : detectElectionType(location);
-
-      if (!detectedElectionType) {
-        return res.status(400).json({
-          error: "Cannot determine election type from location",
-          hint: "Provide electionType or include demkhong/gewog/chiwog/thromde in location",
-        });
-      }
-
-      // Validate location has required fields
-      const validation = validateLocation(location, detectedElectionType);
-      if (!validation.isValid) {
-        return res.status(400).json({
-          error: `Required Location details are missing for candidate registration`,
-          missingFields: validation.missingFields,
-          requiredFields: validation.requiredFields,
-        });
-      }
-
-      locationString = buildLocationString(location, detectedElectionType);
-    } else if (req.body.demkhong) {
-      // Backward compatibility: old format with just demkhong
-      locationString = req.body.demkhong;
-      detectedElectionType = ELECTION_TYPES.NA;
-      logger.info(`Using legacy demkhong format for candidate: ${candidate}`);
-    } else {
-      return res.status(400).json({
-        error: "Missing location information",
-        hint: "Provide either 'location' object or 'demkhong' field",
-      });
-    }
-
-    if (!electionId || !candidate) {
-      return res.status(400).json({
-        error: "Missing required fields: electionId and candidate are required",
-      });
-    }
-
-    const tx = await contract.registerCandidate(
-      electionId,
-      candidate,
-      locationString
-    );
-    await tx.wait();
-
-    logger.info(
-      `Candidate registered: ${candidate} | Type: ${detectedElectionType} | Location: ${locationString} | Tx: ${tx.hash}`
-    );
-
-    res.json({
-      message: "Candidate registered successfully",
-      candidate,
-      electionType: detectedElectionType,
-      location: locationString,
-      txHash: tx.hash,
-    });
-  } catch (err) {
-    if (err.message.includes("Candidate already registered")) {
-      logger.warn(`Candidate already registered: ${candidate}`);
-      return res.status(409).json({
-        error: "Candidate already registered",
-        details: `The candidate '${candidate}' is already registered for this election`,
-      });
-    }
-    if (err.message.includes("Not the owner")) {
-      logger.warn(`Unauthorized candidate registration attempt: ${candidate}`);
-      return res.status(403).json({
-        error: "Unauthorized",
-        details: "Only contract owner can register candidates",
-      });
-    }
-    if (err.message.includes("Election does not exist")) {
-      return res.status(404).json({
-        error: "Election not found",
-        details: `Election with ID '${electionId}' does not exist`,
-      });
-    }
-    logger.error(`Error registering candidate: ${err.message}`);
-    res.status(500).json({
-      error: "Internal server error",
-      details: "Failed to register candidate. Please try again later.",
-    });
-  }
-});
-
-// Remove a candidate
-router.delete("/remove", async (req, res) => {
-  const { electionId, candidate } = req.body;
-
-  if (!electionId || !candidate) {
-    return res
-      .status(400)
-      .json({ error: "Missing required fields: electionId or candidate" });
-  }
-
-  try {
-    const tx = await contract.removeCandidate(electionId, candidate);
-    await tx.wait();
-    logger.info(`Candidate removed: ${candidate}, txHash: ${tx.hash}`);
-    res.json({ message: "Candidate removed", txHash: tx.hash });
-  } catch (err) {
-    if (err.message.includes("Candidate not registered")) {
-      logger.warn(`Candidate not found: ${candidate}`);
-      return res.status(404).json({
-        error: "Candidate not found",
-        details: `Candidate '${candidate}' is not registered for this election`,
-      });
-    }
-    if (err.message.includes("Not the owner")) {
-      logger.warn(`Unauthorized candidate removal attempt: ${candidate}`);
-      return res.status(403).json({
-        error: "Unauthorized",
-        details: "Only contract owner can remove candidates",
-      });
-    }
-    if (err.message.includes("Election does not exist")) {
-      return res.status(404).json({
-        error: "Election not found",
-        details: `Election with ID '${electionId}' does not exist`,
-      });
-    }
-    logger.error(`Error removing candidate: ${err.message}`);
-    res.status(500).json({
-      error: "Internal server error",
-      details: "Failed to remove candidate. Please try again later.",
-    });
-  }
-});
-
-// Cast a vote
-router.post("/vote", async (req, res) => {
-  const { electionId, uid, candidate, gender, pollingStation } = req.body;
-
-  if (!electionId || !uid || !candidate || !gender || !pollingStation) {
-    return res.status(400).send({
-      error:
-        "Missing required fields: electionId, uid, candidate, gender, or pollingStation",
-    });
-  }
-
-  try {
-    const hashedUid = hashUid(uid);
-    const tx = await contract.vote(
-      electionId,
-      hashedUid,
-      candidate,
-      gender,
-      pollingStation
-    );
-    const receipt = await tx.wait();
-
-    const txStatus = receipt.status === 1 ? "success" : "fail";
-    logger.info(
-      `Vote cast | Tx: ${tx.hash} | Status: ${txStatus} | Polling Station: ${pollingStation}`
-    );
-
-    res.send({
-      message: "Vote cast successfully",
-      txHash: tx.hash,
-      txStatus,
-      pollingStation,
-      explorerLink: `https://amoy.polygonscan.com/tx/${tx.hash}`,
-    });
-  } catch (err) {
-    logger.error(`Error casting vote: ${err.message}`);
-    if (err.message.includes("Already voted in this election")) {
-      return res.status(409).json({
-        error: "Already voted",
-        details: "You have already cast your vote in this election",
-      });
-    } else if (err.message.includes("Candidate not registered")) {
-      return res.status(404).json({
-        error: "Candidate not found",
-        details: `Candidate '${candidate}' is not registered for this election`,
-      });
-    } else if (err.message.includes("Invalid gender string")) {
-      return res.status(400).json({
-        error: "Invalid gender",
-        details: "Gender must be 'Male' or 'Female'",
-      });
-    } else if (err.message.includes("Election does not exist")) {
-      return res.status(404).json({
-        error: "Election not found",
-        details: `Election with ID '${electionId}' does not exist`,
-      });
-    } else if (err.message.includes("Not the owner")) {
-      return res.status(403).json({
-        error: "Unauthorized",
-        details: "Only contract owner can cast votes",
-      });
-    } else {
-      return res.status(500).json({
-        error: "Internal server error",
-        details: "Failed to cast vote. Please try again later.",
-      });
-    }
-  }
-});
-
-// End election
-router.post("/end", async (req, res) => {
-  const { electionId } = req.body;
-
-  if (!electionId) {
-    return res
-      .status(400)
-      .json({ error: "Missing required field: electionId" });
-  }
-
-  try {
-    const tx = await contract.endElection(electionId);
-    await tx.wait();
-    logger.info(`Election ended: ${electionId}, txHash: ${tx.hash}`);
-    res.json({ message: "Election ended", txHash: tx.hash });
-  } catch (err) {
-    if (err.message.includes("Election does not exist")) {
-      return res.status(404).json({
-        error: "Election not found",
-        details: `Election with ID '${electionId}' does not exist`,
-      });
-    }
-    if (err.message.includes("Not the owner")) {
-      logger.warn(`Unauthorized election end attempt: ${electionId}`);
-      return res.status(403).json({
-        error: "Unauthorized",
-        details: "Only contract owner can end elections",
-      });
-    }
-    logger.error(`Error ending election: ${err.message}`);
-    res.status(500).json({
-      error: "Internal server error",
-      details: "Failed to end election. Please try again later.",
-    });
-  }
-});
-
-// Read all elections
-router.get("/elections", async (req, res) => {
-  try {
-    const elections = await contract.getAllElections();
-    logger.info(`Fetched all elections: ${elections.length} elections`);
-    res.json({ elections });
-  } catch (err) {
-    if (err.message.includes("Not the owner")) {
-      logger.warn(`Unauthorized elections fetch attempt`);
-      return res.status(403).json({
-        error: "Unauthorized",
-        details: "Only contract owner can view elections",
-      });
-    }
-    logger.error(`Error fetching elections: ${err.message}`);
-    res.status(500).json({
-      error: "Internal server error",
-      details: "Failed to fetch elections. Please try again later.",
-    });
-  }
-});
-
-// Admin-only result view with enhanced data
-router.get("/votesByElection", async (req, res) => {
+/**
+ * Get detailed votes by election with location and gender breakdown
+ * GET /api/votesByElection
+ * Query params: electionId, electionType (optional), location filters (optional)
+ * Requires authentication
+ */
+router.get("/votesByElection", authMiddleware, async (req, res) => {
   let {
     electionId,
     electionType,
@@ -322,7 +36,7 @@ router.get("/votesByElection", async (req, res) => {
   }
 
   try {
-    console.log(`Fetching votes for election: ${electionId}`);
+    logger.info(`Fetching votes for election: ${electionId}`);
 
     // Normalize election type if provided
     if (electionType) {
@@ -609,8 +323,13 @@ router.get("/votesByElection", async (req, res) => {
   }
 });
 
-// Get geographical area results (demkhong/gewog/chiwog/thromde)
-router.get("/geographicalResults", async (req, res) => {
+/**
+ * Get geographical area results
+ * GET /api/geographicalResults
+ * Query params: electionId, electionType (optional)
+ * Requires authentication
+ */
+router.get("/geographicalResults", authMiddleware, async (req, res) => {
   let { electionId, electionType } = req.query;
 
   if (!electionId) {
@@ -689,15 +408,13 @@ router.get("/geographicalResults", async (req, res) => {
   }
 });
 
-// Legacy endpoint for backward compatibility
-router.get("/demkhongResults", async (req, res) => {
-  // Redirect to the new geographicalResults endpoint
-  req.query.electionType = req.query.electionType || ELECTION_TYPES.NA;
-  return geographicalResultsHandler(req, res);
-});
-
-// Helper function to avoid code duplication
-async function geographicalResultsHandler(req, res) {
+/**
+ * Legacy endpoint for backward compatibility
+ * GET /api/demkhongResults
+ * Query params: electionId, electionType (optional)
+ * Requires authentication
+ */
+router.get("/demkhongResults", authMiddleware, async (req, res) => {
   let { electionId, electionType } = req.query;
 
   if (!electionId) {
@@ -764,21 +481,18 @@ async function geographicalResultsHandler(req, res) {
       electionId,
     });
   }
-}
+});
 
-// Public result (only if ended)
+/**
+ * Get public results for an election
+ * GET /api/public-result/:electionId
+ * Query params: electionType (optional)
+ * No authentication required
+ */
 router.get("/public-result/:electionId", async (req, res) => {
   try {
     const { electionId } = req.params;
     let { electionType } = req.query;
-
-    // const isEnded = await contract.isElectionEnded(electionId);
-    // if (!isEnded) {
-    //   logger.warn(
-    //     `Public result request denied - election not ended: ${electionId}`
-    //   );
-    //   return res.status(403).json({ message: "Election is not yet ended." });
-    // }
 
     // Normalize election type if provided
     if (electionType) {
@@ -872,41 +586,6 @@ router.get("/public-result/:electionId", async (req, res) => {
     res.status(500).json({
       error: "Internal server error",
       details: "Failed to fetch election results. Please try again later.",
-    });
-  }
-});
-
-// Check if a user has voted
-router.get("/checkVoted", async (req, res) => {
-  const { electionId, uid } = req.query;
-
-  if (!electionId || !uid) {
-    return res
-      .status(400)
-      .send({ error: "Both electionId and VoterID are required" });
-  }
-
-  try {
-    const hasVoted = await contract.hasUserVoted(electionId, hashUid(uid));
-    res.send({ voted: hasVoted });
-  } catch (err) {
-    if (err.message.includes("Not the owner")) {
-      logger.warn(`Unauthorized vote check attempt: ${electionId}, ${uid}`);
-      return res.status(403).json({
-        error: "Unauthorized",
-        details: "Only contract owner can check vote status",
-      });
-    }
-    if (err.message.includes("Election does not exist")) {
-      return res.status(404).json({
-        error: "Election not found",
-        details: `Election with ID '${electionId}' does not exist`,
-      });
-    }
-    logger.error(`Error checking vote status: ${err.message}`);
-    res.status(500).json({
-      error: "Internal server error",
-      details: "Failed to check vote status. Please try again later.",
     });
   }
 });

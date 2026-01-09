@@ -4,8 +4,8 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import swaggerUi from "swagger-ui-express";
 import YAML from "yamljs";
-import authRouter from "./services/auth.js";
-import electionRouter from "./services/demkhongAddedService.js";
+import authRouter from "./auth/auth.js";
+import electionRouter from "./services/index.js";
 
 import { logger } from "./utils/logger.js";
 import { networkInterfaces } from "os";
@@ -25,9 +25,7 @@ const accessLogStream = fs.createWriteStream(
 );
 
 const app = express();
-//const swaggerDocument = YAML.load('./utils/swagger.yaml');
 const swaggerDocument = YAML.load("./utils/swagger-new.yaml");
-app.use(cors());
 app.use(bodyParser.json());
 app.use(morgan("combined", { stream: accessLogStream }));
 app.use(
