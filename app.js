@@ -5,7 +5,7 @@ import bodyParser from "body-parser";
 import swaggerUi from "swagger-ui-express";
 import YAML from "yamljs";
 import authRouter from "./auth/auth.js";
-import electionRouter from "./services/index.js";
+import electionRouter from "./routes/index.js";
 
 import { logger } from "./utils/logger.js";
 import { networkInterfaces } from "os";
