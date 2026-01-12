@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { contract, hashUid, logger } from "../utils.js";
-import { authMiddleware } from "../../auth/auth.js";
+import { contract, hashUid, logger } from "../utils/abi.utils.js";
+import { authMiddleware } from "../auth/auth.js";
 
 const router = Router();
 

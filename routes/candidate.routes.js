@@ -1,12 +1,14 @@
 import { Router } from "express";
+import { ELECTION_TYPES } from "../election/election.constants.js";
 import {
   normalizeElectionType,
   detectElectionType,
-  validateLocation,
+  } from "../election/election.type.js";
+import {
   buildLocationString,
-  ELECTION_TYPES,
-} from "../../utils/electionTypes.js";
-import { contract, logger } from "../utils.js";
+  validateLocation,
+  } from "../election/election.location.js";
+import { logger } from "../utils/logger.js";
 
 const router = Router();
 

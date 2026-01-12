@@ -2,7 +2,7 @@ import { JsonRpcProvider, Wallet, Contract } from "ethers";
 import crypto from "crypto";
 import fs from "fs";
 import "dotenv/config";
-import { logger } from "../utils/logger.js";
+import { logger } from "./logger.js";
 
 const abiData = JSON.parse(fs.readFileSync("./abi/demkhongAbi.json", "utf-8"));
 const abi = abiData.abi;

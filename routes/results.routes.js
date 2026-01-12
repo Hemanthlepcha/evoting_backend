@@ -1,14 +1,14 @@
 import { Router } from "express";
-import {
-  ELECTION_TYPES,
+import { ELECTION_TYPES } from "../election/election.constants.js";
+import { 
   parseLocationString,
-  getLocationLabel,
-  normalizeElectionType,
   buildLocationString,
-  getRequiredLocationFields,
-} from "../../utils/electionTypes.js";
-import { contract, logger } from "../utils.js";
-import { authMiddleware } from "../../auth/auth.js";
+  getRequiredLocationFields}from "../election/election.location.js";
+import {
+  getLocationLabel,
+  normalizeElectionType} from "../election/election.type.js";
+import { contract, logger } from "../utils/abi.utils.js";
+import { authMiddleware } from "../auth/auth.js";
 
 const router = Router();
 
