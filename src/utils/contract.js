@@ -4,7 +4,7 @@ import fs from "fs";
 import "dotenv/config";
 import { logger } from "./logger.js";
 
-const abiData = JSON.parse(fs.readFileSync("./abi/demkhongAbi.json", "utf-8"));
+const abiData = JSON.parse(fs.readFileSync("./contracts/abi/Evoting.json", "utf-8"));
 const abi = abiData.abi;
 
 const provider = new JsonRpcProvider(process.env.AMOY_RPC_URL);
