@@ -1,13 +1,13 @@
 import { Router } from "express";
 import { authMiddleware } from "../auth/auth.js";
-import { castVoteService, checkVotedService } from "../services/vote.service.js";
+import { castVote, checkVoted } from "../controllers/vote.controller.js";
 
 const router = Router();
 
 //Cast a vote. /api/vote
-router.post("/vote", authMiddleware, castVoteService);
+router.post("/vote", authMiddleware, castVote);
 
 //Check if a user has voted.  /api/checkVoted
-router.get("/checkVoted", authMiddleware, checkVotedService);
+router.get("/checkVoted", authMiddleware, checkVoted);
 
 export default router;

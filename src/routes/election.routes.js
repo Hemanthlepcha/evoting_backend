@@ -1,13 +1,11 @@
 import { Router } from "express";
-import { contract, logger } from "../utils/contract.js";
 import { authMiddleware } from "../auth/auth.js";
-import { getAllElections } from "../controllers/election.controller.js";
-import { endElectionService } from "../services/election.service.js";
+import { getAllElections, endElection } from "../controllers/election.controller.js";
 
 const router = Router();
 
 // End an election.   /api/end
-router.post("/end", authMiddleware, endElectionService);
+router.post("/end", authMiddleware, endElection);
 
 // Get all elections.   /api/elections
 router.get("/elections", authMiddleware, getAllElections);
