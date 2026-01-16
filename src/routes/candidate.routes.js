@@ -4,7 +4,7 @@ import { registerCandidate, removeCandidate } from "../controllers/candidate.con
 const router = Router();
 
 //Register a candidate.  /api/register
-router.post("/register", registerCandidate,);
+router.post("/register", registerCandidate);
 
 // Remove a candidate.  /api/remove
 router.delete("/remove", removeCandidate);

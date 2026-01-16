@@ -1,9 +1,5 @@
 import { contract, logger } from "../utils/contract.js";
-import {
-  parseLocationString,
-  buildLocationString,
-  getRequiredLocationFields,
-} from "../election/election.location.js";
+import { parseLocationString, buildLocationString, getRequiredLocationFields } from "../election/election.location.js";
 import { getLocationLabel, normalizeElectionType } from "../election/election.type.js";
 
 /**
@@ -12,37 +8,206 @@ import { getLocationLabel, normalizeElectionType } from "../election/election.ty
  * Query params: electionId, electionType (optional), location filters (optional)
  * Requires authentication
  */
-export const getVotesByElectionService = async (electionId) => {
-    try {
-        console.log(`Fetching votes for election: ${electionId}`);
+export const getVotesByElectionService = async ({
+  electionId,
+  electionType,
+  dzongkhag,
+  gewog,
+  chiwog,
+  demkhong,
+  thromde,
+}) => {
+  try {
+    // Normalize election type
+    if (electionType) {
+      electionType = normalizeElectionType(electionType);
 
-        const [
-            candidates,
-            demkhongs,
-            candidateVotes,
-            totalVotes,
-            totalMale,
-            totalFemale
-        ] = await contract.getCandidateVotesAndTotalElectionVotes(electionId);
+      const providedFields = [
+        dzongkhag && "dzongkhag",
+        gewog && "gewog",
+        chiwog && "chiwog",
+        demkhong && "demkhong",
+        thromde && "thromde",
+      ].filter(Boolean);
 
-        const results = candidates.map((candidate, index) => ({
-            candidate,
-            demkhong: demkhongs[index],
-            votes: candidateVotes[index].toString(),
-        }));
+      if (providedFields.length) {
+        const required = getRequiredLocationFields(electionType);
+        const invalid = providedFields.filter(
+          (f) => !required.includes(f)
+        );
 
-        logger.info(`Admin fetched results for election: ${electionId}`);
+        if (invalid.length) {
+          throw {
+            code: "BAD_REQUEST",
+            payload: {
+              error: "Location fields do not match election type",
+              providedFields: invalid,
+              requiredFields: required,
+            },
+          };
+        }
+      }
+    }
+
+    const [
+      candidates,
+      locationStrings,
+      candidateVotes,
+      totalVotes,
+      totalMale,
+      totalFemale,
+    ] = await contract.getCandidateVotesAndTotalElectionVotes(electionId);
+
+    if (!candidates.length) {
+      throw {
+        code: "NOT_FOUND",
+        payload: {
+          error: "No candidates found",
+          results: [],
+          totalVotes: "0",
+          totalMale: "0",
+          totalFemale: "0",
+        },
+      };
+    }
+
+    // Detect election type if missing
+    if (!electionType && locationStrings.length) {
+      const parts = locationStrings[0].split("/");
+      if (parts.length === 1) electionType = ELECTION_TYPES.NC;
+      if (parts.length === 3) electionType = ELECTION_TYPES.C_TSHOGPA;
+    }
+
+    // Build location filter
+    let filterLocationString = null;
+    const filterLocation = {
+      dzongkhag,
+      gewog,
+      chiwog,
+      demkhong,
+      thromde,
+    };
+
+    Object.keys(filterLocation).forEach(
+      (k) => filterLocation[k] === undefined && delete filterLocation[k]
+    );
+
+    if (electionType && Object.keys(filterLocation).length) {
+      filterLocationString = buildLocationString(
+        filterLocation,
+        electionType
+      );
+    }
+
+    // Candidate-level results
+    let allResults = await Promise.all(
+      candidates.map(async (candidate, index) => {
+        const location = locationStrings[index];
+
+        const locationDetails = electionType
+          ? parseLocationString(location, electionType)
+          : { location };
+
+        const [ps, votesPS] =
+          await contract.getCandidatePollingStationVotes(
+            electionId,
+            candidate
+          );
+
+        const psVotes = {};
+        ps.forEach((p, i) => {
+          if (votesPS[i] > 0n) psVotes[p] = votesPS[i].toString();
+        });
+
+        const [male, female] =
+          await contract.getCandidateGenderVotes(
+            electionId,
+            candidate
+          );
 
         return {
-            results,
-            totalVotes: totalVotes.toString(),
-            totalMale: totalMale.toString(),
-            totalFemale: totalFemale.toString()
+          candidate,
+          location,
+          locationDetails,
+          ps_votes: psVotes,
+          totalVotes: candidateVotes[index].toString(),
+          totalMale: male.toString(),
+          totalFemale: female.toString(),
         };
-    } catch (err) {
-        throw err; // important: propagate original error
+      })
+    );
+
+    // Apply location filter
+    let results = filterLocationString
+      ? allResults.filter((r) =>
+          r.location.startsWith(filterLocationString)
+        )
+      : allResults;
+
+    if (filterLocationString && !results.length) {
+      throw {
+        code: "NOT_FOUND",
+        payload: {
+          error: "No results found for given location",
+          searchedLocation: filterLocationString,
+          results: [],
+        },
+      };
     }
+
+    // Polling station gender breakdown
+    let pollingStationBreakdown = {};
+    try {
+      const [ps, malePS, femalePS, totalPS] =
+        await contract.getPollingStationGenderBreakdown(electionId);
+
+      ps.forEach((p, i) => {
+        pollingStationBreakdown[p] = {
+          maleVote: Number(malePS[i]),
+          femaleVote: Number(femalePS[i]),
+          totalVote: Number(totalPS[i]),
+        };
+      });
+    } catch (err) {
+      logger.warn("Polling station breakdown skipped");
+    }
+
+    return {
+      results,
+      ps: pollingStationBreakdown,
+      totalVotes: filterLocationString ? undefined : totalVotes.toString(),
+      totalMale: filterLocationString ? undefined : totalMale.toString(),
+      totalFemale: filterLocationString
+        ? undefined
+        : totalFemale.toString(),
+      electionType: electionType || "unknown",
+      filteredBy: filterLocationString,
+    };
+  } catch (err) {
+    if (err.message?.includes("Not the owner")) {
+      throw {
+        code: "UNAUTHORIZED",
+        payload: {
+          error: "Unauthorized",
+          details: "Only contract owner can view results",
+        },
+      };
+    }
+
+    if (err.message?.includes("Election")) {
+      throw {
+        code: "NOT_FOUND",
+        payload: {
+          error: "Election not found",
+          electionId,
+        },
+      };
+    }
+
+    throw err;
+  }
 };
+
 
 /**
  * Fetch public results after election ends
@@ -51,40 +216,117 @@ export const getVotesByElectionService = async (electionId) => {
  * Query params: electionType (optional)
  * No authentication required
  */
-export const getPublicResultService = async (electionId) => {
-    try {
-        const isEnded = await contract.isElectionEnded(electionId);
+export const getPublicResultsService = async ({
+  electionId,
+  electionType,
+}) => {
+  try {
+    // Normalize election type if provided
+    if (electionType) {
+      electionType = normalizeElectionType(electionType);
+    }
 
-        if (!isEnded) {
-            logger.warn(`Public result request denied - election not ended: ${electionId}`);
-            return { status: 403, body: { message: "Election is not yet ended." } };
-        }
+    // OPTIONAL: Uncomment if public results must be restricted
+    /*
+    const isEnded = await contract.isElectionEnded(electionId);
+    if (!isEnded) {
+      throw {
+        code: "FORBIDDEN",
+        payload: { message: "Election is not yet ended." },
+      };
+    }
+    */
 
-        const [candidates, demkhongs, candidateVotes, totalVotes, totalMale, totalFemale] =
-            await contract.getCandidateVotesAndTotalElectionVotes(electionId);
+    const [
+      candidates,
+      locationStrings,
+      candidateVotes,
+      totalVotes,
+      totalMale,
+      totalFemale,
+    ] = await contract.getCandidateVotesAndTotalElectionVotes(electionId);
 
-        const results = candidates.map((candidate, index) => ({
-            candidate,
-            demkhong: demkhongs[index],
-            votes: candidateVotes[index].toString(),
-        }));
+    const results = await Promise.all(
+      candidates.map(async (candidate, index) => {
+        const locationStr = locationStrings[index];
 
-        logger.info(`Public results fetched for election: ${electionId}`);
+        const locationDetails = electionType
+          ? parseLocationString(locationStr, electionType)
+          : { location: locationStr };
+
+        const [pollingStations, votesPerStation] =
+          await contract.getCandidatePollingStationVotes(
+            electionId,
+            candidate
+          );
+
+        const votesByPollingStation = {};
+        pollingStations.forEach((ps, idx) => {
+          votesByPollingStation[ps] = votesPerStation[idx].toString();
+        });
+
+        const [maleVotes, femaleVotes] =
+          await contract.getCandidateGenderVotes(
+            electionId,
+            candidate
+          );
 
         return {
-            status: 200,
-            body: {
-                results,
-                totalVotes: totalVotes.toString(),
-                totalMale: totalMale.toString(),
-                totalFemale: totalFemale.toString()
-            }
+          candidate,
+          location: locationStr,
+          locationDetails,
+          demkhong: locationStr, // backward compatibility
+          votes: votesByPollingStation,
+          totalVotes: candidateVotes[index].toString(),
+          totalMale: maleVotes.toString(),
+          totalFemale: femaleVotes.toString(),
         };
+      })
+    );
 
+    // Polling station gender breakdown
+    let pollingStationBreakdown = {};
+    try {
+      const [ps, malePS, femalePS, totalPS] =
+        await contract.getPollingStationGenderBreakdown(electionId);
+
+      ps.forEach((station, index) => {
+        pollingStationBreakdown[station] = {
+          maleVote: Number(malePS[index]),
+          femaleVote: Number(femalePS[index]),
+          totalVote: Number(totalPS[index]),
+        };
+      });
     } catch (err) {
-        throw err;
+      logger.warn(
+        `Polling station breakdown unavailable: ${err.message}`
+      );
     }
+
+    logger.info(`Public results fetched for election: ${electionId}`);
+
+    return {
+      results,
+      ps: pollingStationBreakdown,
+      totalVotes: totalVotes.toString(),
+      totalMale: totalMale.toString(),
+      totalFemale: totalFemale.toString(),
+    };
+  } catch (err) {
+    if (err.message?.includes("Election ID does not exist")) {
+      throw {
+        code: "NOT_FOUND",
+        payload: {
+          error: "Election not found",
+          details: `Election with ID '${electionId}' does not exist`,
+        },
+      };
+    }
+
+    throw err;
+  }
 };
+
 
 /**
  * Fetch geographical results (demkhong)
@@ -93,38 +335,70 @@ export const getPublicResultService = async (electionId) => {
  * Query params: electionId, electionType (optional)
  * Requires authentication
  */
-export async function getGeographicalResultsService(query) {
-  const { electionId, electionType } = query;
-
-  if (!electionId) return { status: 400, body: { error: "electionId query parameter is required" } };
-
+export const getGeographicalResultsService = async ({ electionId, electionType }) => {
   try {
-    const normalizedType = electionType ? normalizeElectionType(electionType) : null;
+    // Normalize election type if provided
+    if (electionType) electionType = normalizeElectionType(electionType);
 
-    const [locationStrings, totalVotesByLocation, maleByLocation, femaleByLocation] =
-      await contract.getDemkhongResults(electionId);
+    // Fetch location-level results from contract
+    const [
+      locationStrings,
+      totalVotesByLocation,
+      maleByLocation,
+      femaleByLocation
+    ] = await contract.getDemkhongResults(electionId);
 
-    const results = locationStrings.map((loc, i) => {
-      const locationDetails = normalizedType ? parseLocationString(loc, normalizedType) : { location: loc };
-      const locationLabel = normalizedType ? getLocationLabel(normalizedType) : "Location";
+    const results = locationStrings.map((locationStr, index) => {
+      let locationDetails = { location: locationStr };
+      let locationLabel = "Location";
+
+      if (electionType) {
+        locationDetails = parseLocationString(locationStr, electionType);
+        locationLabel = getLocationLabel(electionType);
+      }
+
       return {
-        location: loc,
+        location: locationStr,
         locationDetails,
-        [locationLabel.toLowerCase()]: loc,
-        totalVotes: totalVotesByLocation[i].toString(),
-        maleVotes: maleByLocation[i].toString(),
-        femaleVotes: femaleByLocation[i].toString(),
+        [locationLabel.toLowerCase()]: locationStr, // backward compatibility
+        totalVotes: totalVotesByLocation[index].toString(),
+        maleVotes: maleByLocation[index].toString(),
+        femaleVotes: femaleByLocation[index].toString(),
       };
     });
 
-    return { status: 200, body: { results, electionType: normalizedType || "unknown", locationLabel: normalizedType ? getLocationLabel(normalizedType) : "Location" } };
+    logger.info(`Fetched geographical results for election: ${electionId} (Type: ${electionType || "unknown"})`);
+
+    return {
+      results,
+      electionType: electionType || "unknown",
+      locationLabel: electionType ? getLocationLabel(electionType) : "Location"
+    };
   } catch (err) {
-    if (err.message.includes("Election does not exist")) return { status: 404, body: { error: "Election not found", electionId } };
-    if (err.message.includes("Not the owner")) return { status: 403, body: { error: "Unauthorized", electionId } };
+    if (err.message.includes("Election does not exist")) {
+      throw {
+        code: "NOT_FOUND",
+        payload: {
+          error: "Election not found",
+          details: `Election with ID '${electionId}' does not exist`,
+          electionId,
+        }
+      };
+    }
+    if (err.message.includes("Not the owner")) {
+      throw {
+        code: "FORBIDDEN",
+        payload: {
+          error: "Unauthorized",
+          details: "Only contract owner can view geographical results",
+        }
+      };
+    }
+
     logger.error(`Error fetching geographical results: ${err.message}`);
-    return { status: 500, body: { error: "Internal server error", electionId } };
+    throw err;
   }
-}
+};
 
 /**
  * Legacy endpoint for backward compatibility
@@ -155,4 +429,74 @@ export const getDemkhongResultsService = async (electionId) => {
         throw err; 
     }
 };
+
+// Helper function to avoid code duplication
+async function geographicalResultsHandler(req, res) {
+  let { electionId, electionType } = req.query;
+
+  if (!electionId) {
+    return res
+      .status(400)
+      .json({ error: "electionId query parameter is required" });
+  }
+
+  try {
+    // Normalize election type if provided
+    if (electionType) {
+      electionType = normalizeElectionType(electionType);
+    }
+
+    const [
+      locationStrings,
+      totalVotesByLocation,
+      maleByLocation,
+      femaleByLocation,
+    ] = await contract.getDemkhongResults(electionId);
+
+    const results = locationStrings.map((locationStr, index) => {
+      let locationDetails = {};
+
+      if (electionType) {
+        locationDetails = parseLocationString(locationStr, electionType);
+      } else {
+        locationDetails = { location: locationStr };
+      }
+
+      return {
+        location: locationStr,
+        locationDetails,
+        demkhong: locationStr, // backward compatibility
+        totalVotes: totalVotesByLocation[index].toString(),
+        maleVotes: maleByLocation[index].toString(),
+        femaleVotes: femaleByLocation[index].toString(),
+      };
+    });
+
+    logger.info(`Fetched geographical results for election: ${electionId}`);
+    res.json({ results });
+  } catch (err) {
+    if (err.message.includes("Election does not exist")) {
+      return res.status(404).json({
+        error: "Election not found",
+        details: `Election with ID '${electionId}' does not exist`,
+        electionId,
+      });
+    }
+    if (err.message.includes("Not the owner")) {
+      logger.warn(
+        `Unauthorized geographical results fetch attempt: ${electionId}`
+      );
+      return res.status(403).json({
+        error: "Unauthorized",
+        details: "Only contract owner can view geographical results",
+      });
+    }
+    logger.error(`Error fetching geographical results: ${err.message}`);
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to fetch geographical results. Please try again later.",
+      electionId,
+    });
+  }
+}
 

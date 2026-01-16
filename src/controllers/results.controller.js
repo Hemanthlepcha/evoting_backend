@@ -1,118 +1,113 @@
-import {
-  getVotesByElectionService,
-  getGeographicalResultsService,
-  getPublicResultService,
-  getDemkhongResultsService
-} from "../services/results.service.js";
+import { getVotesByElectionService, getGeographicalResultsService, getPublicResultsService } from "../services/results.service.js";
 import { logger } from "../utils/contract.js";
 
 //Get detailed votes by election with location and gender breakdown. /api/votesByElection
-
-
 export const getVotesByElection = async (req, res) => {
-    const { electionId } = req.query;
+  const {
+    electionId,
+    electionType,
+    dzongkhag,
+    gewog,
+    chiwog,
+    demkhong,
+    thromde,
+  } = req.query;
 
-    if (!electionId) {
-        return res.status(400).json({
-            error: "electionId query parameter is required"
-        });
+  if (!electionId) {
+    return res.status(400).json({
+      error: "electionId query parameter is required",
+    });
+  }
+
+  try {
+    const result = await getVotesByElectionService({
+      electionId,
+      electionType,
+      dzongkhag,
+      gewog,
+      chiwog,
+      demkhong,
+      thromde,
+    });
+
+    res.json(result);
+  } catch (err) {
+    if (err.code === "NOT_FOUND") {
+      return res.status(404).json(err.payload);
     }
 
-    try {
-        const data = await getVotesByElectionService(electionId);
-        res.json(data);
-
-    } catch (err) {
-        if (err.message.includes("Election ID does not exist")) {
-            logger.warn(`Election not found: ${electionId}`);
-            return res.status(404).json({
-                error: "Election ID does not exist",
-                electionId,
-                results: []
-            });
-        }
-
-        if (err.message.includes("Not the owner")) {
-            logger.warn(`Unauthorized results fetch attempt: ${electionId}`);
-            return res.status(403).json({
-                message: "Unauthorized: Only contract owner can view detailed results"
-            });
-        }
-
-        logger.error(`Error fetching all vote counts: ${err.message}`);
-        res.status(400).json({
-            error: "Error fetching election results",
-            electionId,
-            results: []
-        });
+    if (err.code === "UNAUTHORIZED") {
+      return res.status(403).json(err.payload);
     }
+
+    if (err.code === "BAD_REQUEST") {
+      return res.status(400).json(err.payload);
+    }
+
+    logger.error(`Error fetching votes: ${err.message}`);
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to fetch election results. Please try again later.",
+      electionId,
+    });
+  }
 };
 
 // GET /api/public-result/:electionId
 export const getPublicResult = async (req, res) => {
-    const { electionId } = req.params;
+  const { electionId } = req.params;
+  let { electionType } = req.query;
 
-    try {
-        const result = await getPublicResultService(electionId);
+  try {
+    const data = await getPublicResultsService({
+      electionId,
+      electionType,
+    });
 
-        if (result.status !== 200) {
-            return res.status(result.status).json(result.body);
-        }
-
-        res.json(result.body);
-
-    } catch (err) {
-        if (err.message.includes("Election ID does not exist")) {
-            return res.status(404).json({ error: "Election does not exist" });
-        }
-
-        logger.error(`Error fetching public results: ${err.message}`);
-        res.status(400).json({ error: "Error fetching election results" });
+    res.json(data);
+  } catch (err) {
+    if (err.code === "NOT_FOUND") {
+      return res.status(404).json(err.payload);
     }
+
+    if (err.code === "FORBIDDEN") {
+      return res.status(403).json(err.payload);
+    }
+
+    logger.error(`Error fetching public results: ${err.message}`);
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to fetch election results. Please try again later.",
+    });
+  }
 };
 
 // Get geographical area results. /api/geographicalResults
-export async function getGeographicalResults(req, res) {
-  const result = await getGeographicalResultsService(req.query);
-  return res.status(result.status).json(result.body);
-}
+export const getGeographicalResults = async (req, res) => {
+  const { electionId, electionType } = req.query;
 
+  if (!electionId) {
+    return res
+      .status(400)
+      .json({ error: "electionId query parameter is required" });
+  }
 
-
-// GET /api/demkhongResults
-export const getDemkhongResults = async (req, res) => {
-    const { electionId } = req.query;
-
-    if (!electionId) {
-        return res.status(400).json({ error: "electionId query parameter is required" });
+  try {
+    const data = await getGeographicalResultsService({ electionId, electionType });
+    res.json(data);
+  } catch (err) {
+    if (err.code === "NOT_FOUND") {
+      return res.status(404).json(err.payload);
+    }
+    if (err.code === "FORBIDDEN") {
+      return res.status(403).json(err.payload);
     }
 
-    try {
-        const result = await getDemkhongResultsService(electionId);
-
-        res.status(result.status).json(result.body);
-
-    } catch (err) {
-        if (err.message.includes("Election does not exist")) {
-            return res.status(404).json({
-                error: "Election ID does not exist",
-                electionId,
-                results: []
-            });
-        }
-
-        if (err.message.includes("Not the owner")) {
-            logger.warn(`Unauthorized constituency results fetch attempt: ${electionId}`);
-            return res.status(403).json({
-                message: "Unauthorized: Only contract owner can view constituency results"
-            });
-        }
-
-        logger.error(`Error fetching constituency results: ${err.message}`);
-        res.status(400).json({
-            error: "Error fetching constituency results",
-            electionId,
-            results: []
-        });
-    }
+    logger.error(`Error fetching geographical results: ${err.message}`);
+    res.status(500).json({
+      error: "Internal server error",
+      details: "Failed to fetch geographical results. Please try again later.",
+      electionId,
+    });
+  }
 };
