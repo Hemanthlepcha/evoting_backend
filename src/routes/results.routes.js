@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authMiddleware } from "../auth/auth.js";
+import { authMiddleware } from "../middleware/authMiddleware.js";
 import { getVotesByElection, getGeographicalResults, getPublicResult } from "../controllers/results.controller.js";
 
 const router = Router();

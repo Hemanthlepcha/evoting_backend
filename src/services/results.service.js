@@ -406,7 +406,7 @@ export const getGeographicalResultsService = async ({ electionId, electionType }
  * Query params: electionId, electionType (optional)
  * Requires authentication
  */
-export const getDemkhongResultsService = async (electionId) => {
+/*export const getDemkhongResultsService = async (electionId) => {
     try {
         const [demkhongs, totalVotesByDemkhong, maleByDemkhong, femaleByDemkhong] =
             await contract.getDemkhongResults(electionId);
@@ -428,7 +428,7 @@ export const getDemkhongResultsService = async (electionId) => {
     } catch (err) {
         throw err; 
     }
-};
+};*/
 
 // Helper function to avoid code duplication
 async function geographicalResultsHandler(req, res) {
