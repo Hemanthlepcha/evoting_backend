@@ -1,6 +1,10 @@
 import { Router } from "express";
+import {
+  getGeographicalResults,
+  getPublicResult,
+  getVotesByElection,
+} from "../controllers/results.controller.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
-import { getVotesByElection, getGeographicalResults, getPublicResult } from "../controllers/results.controller.js";
 
 const router = Router();
 
@@ -14,7 +18,7 @@ router.get("/public-result/:electionId", getPublicResult);
 router.get("/geographicalResults", authMiddleware, getGeographicalResults);
 
 // GET Legacy endpoint for backward compatibility. /api/demkhongResults
-router.get("/demkhongResults", (req, res, next) => {
+router.get("/demkhongResults", authMiddleware, (req, res, next) => {
   // Default electionType to NA for legacy demkhong
   req.query.electionType = req.query.electionType || ELECTION_TYPES.NA;
   return getGeographicalResults(req, res, next);

@@ -26,14 +26,14 @@ export const castVoteService = async (body) => {
       hashedUid,
       candidate,
       gender,
-      pollingStation
+      pollingStation,
     );
 
     const receipt = await tx.wait();
     const txStatus = receipt.status === 1 ? "success" : "fail";
 
     logger.info(
-      `Vote cast | Tx: ${tx.hash} | Status: ${txStatus} | Polling Station: ${pollingStation}`
+      `Vote cast | Tx: ${tx.hash} | Status: ${txStatus} | Polling Station: ${pollingStation}`,
     );
 
     return {
@@ -108,7 +108,6 @@ export const castVoteService = async (body) => {
   }
 };
 
-
 /**
  * Check if a user has voted
  * GET /api/checkVoted
@@ -117,10 +116,7 @@ export const castVoteService = async (body) => {
 export const checkVotedService = async (electionId, uid) => {
   const hashedUid = hashUid(uid);
 
-  const hasVoted = await contract.hasUserVoted(
-    electionId,
-    hashedUid
-  );
+  const hasVoted = await contract.hasUserVoted(electionId, hashedUid);
 
   return hasVoted;
 };
